@@ -1,3 +1,4 @@
+import React from "react";
 import { useSimulation, SCENARIO_CONFIGS, ScenarioName } from "@/lib/stores/useSimulation";
 
 function GateInfoModal() {
@@ -684,18 +685,77 @@ function Footer() {
 }
 
 export function HUD() {
+  const [collapsedPanels, setCollapsedPanels] = React.useState({
+    stats: false,
+    metrics: true,
+    events: true,
+    warnings: false,
+  });
+  
+  const togglePanel = (panel: keyof typeof collapsedPanels) => {
+    setCollapsedPanels(prev => ({ ...prev, [panel]: !prev[panel] }));
+  };
+  
+  const toggleButton = (label: string, panel: keyof typeof collapsedPanels) => (
+    <button
+      onClick={() => togglePanel(panel)}
+      style={{
+        padding: "2px 6px",
+        minWidth: "auto",
+        fontSize: "12px",
+        marginLeft: "auto",
+        background: "#333333",
+        border: "1px solid #666666",
+      }}
+    >
+      {collapsedPanels[panel] ? "▼" : "▲"}
+    </button>
+  );
+  
   return (
     <div className="hud">
       <Header />
-      <ScenarioAlert />
-      <CapacityWarnings />
       <ControlPanel />
-      <StatisticsPanel />
-      <GateInfoModal />
-      <div className="hud-bottom">
-        <MetricsPanel />
-        <EventLog />
+      
+      {!collapsedPanels.warnings && <ScenarioAlert />}
+      {!collapsedPanels.warnings && <CapacityWarnings />}
+      
+      <div style={{ position: "relative", margin: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(0, 0, 0, 0.9)", padding: "6px 12px", borderRadius: "4px", border: "1px solid #00ffff", pointerEvents: "auto" }}>
+          <span style={{ color: "#00ffff", fontSize: "12px" }}>STATISTICS</span>
+          {toggleButton("STATISTICS", "stats")}
+        </div>
+        {!collapsedPanels.stats && <StatisticsPanel />}
       </div>
+      
+      <GateInfoModal />
+      
+      <div className="hud-bottom">
+        {!collapsedPanels.metrics && <MetricsPanel />}
+        {!collapsedPanels.events && <EventLog />}
+        
+        {(collapsedPanels.metrics || collapsedPanels.events) && (
+          <div style={{ display: "flex", gap: "8px", padding: "8px", pointerEvents: "auto" }}>
+            {collapsedPanels.metrics && (
+              <button
+                onClick={() => togglePanel("metrics")}
+                style={{ background: "#1a4d4d", border: "1px solid #00ffff" }}
+              >
+                Show Metrics ▼
+              </button>
+            )}
+            {collapsedPanels.events && (
+              <button
+                onClick={() => togglePanel("events")}
+                style={{ background: "#1a4d4d", border: "1px solid #00ffff" }}
+              >
+                Show Events ▼
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      
       <Footer />
     </div>
   );

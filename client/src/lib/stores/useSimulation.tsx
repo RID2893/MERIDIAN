@@ -194,7 +194,7 @@ function createGates(cityId: CityName, disabledGates: string[] = []): Gate[] {
     for (let i = 0; i < GATES_PER_QUADRANT; i++) {
       const angleWithinQuadrant = (i / GATES_PER_QUADRANT) * 90;
       const angle = quadrantOffsets[quadrant] + angleWithinQuadrant;
-      const distance = GATE_MIN_DISTANCE + (i / GATES_PER_QUADRANT) * (GATE_MAX_DISTANCE - GATE_MIN_DISTANCE);
+      const distance = RING_RADIUS + (i / GATES_PER_QUADRANT) * 0.4 - 0.2;
       const gateId = `${cityId}-${quadrant[0]}Q-${i + 1}`;
       const isDisabled = disabledGates.includes(gateId);
       

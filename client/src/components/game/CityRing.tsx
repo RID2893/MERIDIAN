@@ -27,9 +27,9 @@ function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number,
   
   const gatePosition = useMemo(() => {
     const angleRad = (gate.angle * Math.PI) / 180;
-    const x = cityPosition[0] + Math.cos(angleRad) * 3;
-    const z = cityPosition[2] + Math.sin(angleRad) * 3;
-    const y = cityPosition[1];
+    const x = cityPosition[0] + Math.cos(angleRad) * 6.0;
+    const z = cityPosition[2] + Math.sin(angleRad) * 6.0;
+    const y = cityPosition[1] + 0.1;
     return [x, y, z] as [number, number, number];
   }, [gate.angle, cityPosition]);
   

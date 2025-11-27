@@ -1,4 +1,4 @@
-import React from "react";
+import { useState } from "react";
 import { useSimulation, SCENARIO_CONFIGS, ScenarioName } from "@/lib/stores/useSimulation";
 
 function GateInfoModal() {
@@ -685,7 +685,7 @@ function Footer() {
 }
 
 export function HUD() {
-  const [collapsedPanels, setCollapsedPanels] = React.useState({
+  const [collapsedPanels, setCollapsedPanels] = useState({
     stats: false,
     metrics: true,
     events: true,

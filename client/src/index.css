@@ -157,6 +157,27 @@ select option {
   color: #ffffff;
 }
 
+.scenario-group {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.scenario-group .control-label {
+  margin-bottom: 0;
+}
+
+.scenario-group select {
+  min-width: 180px;
+}
+
+.scenario-description {
+  font-size: 10px;
+  color: #888888;
+  font-style: italic;
+  margin-top: 2px;
+}
+
 .hud-bottom {
   flex: 1;
   display: flex;

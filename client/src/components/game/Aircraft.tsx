@@ -1,6 +1,7 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
+import { Trail } from "@react-three/drei";
 import { useSimulation, type Aircraft as AircraftType } from "@/lib/stores/useSimulation";
 
 const SD_POSITION: [number, number, number] = [-12, 0, 0];
@@ -21,9 +22,14 @@ const PIPELINE_PATHS = {
   },
 };
 
+const TRAIL_LENGTH = 15;
+const MAX_TRAIL_POSITIONS = 20;
+
 function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
-  const meshRef = useRef<THREE.Group>(null);
-  const trailRef = useRef<THREE.Points>(null);
+  const meshRef = useRef<THREE.Mesh>(null);
+  const groupRef = useRef<THREE.Group>(null);
+  const trailPositionsRef = useRef<THREE.Vector3[]>([]);
+  const trailGeometryRef = useRef<THREE.BufferGeometry>(null);
   
   const position = useMemo(() => {
     if (aircraft.status === "in_ring" && aircraft.cityId) {
@@ -36,7 +42,8 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
     }
     
     if (aircraft.status === "descending" || aircraft.status === "ascending" || aircraft.status === "landed") {
-      const cityPos = aircraft.cityId === "San Diego" ? SD_POSITION : LA_POSITION;
+      const cityPos = aircraft.cityId === "San Diego" ? SD_POSITION : 
+                      aircraft.originCity === "San Diego" ? SD_POSITION : LA_POSITION;
       const angleRad = (aircraft.angleOnRing * Math.PI) / 180;
       const x = cityPos[0] + Math.cos(angleRad) * (aircraft.distanceFromCenter - 1);
       const z = cityPos[2] + Math.sin(angleRad) * (aircraft.distanceFromCenter - 1);
@@ -83,29 +90,74 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
   }, [aircraft]);
   
   useFrame(() => {
-    if (meshRef.current) {
-      meshRef.current.position.copy(position);
-      meshRef.current.rotation.copy(rotation);
+    if (groupRef.current) {
+      groupRef.current.position.copy(position);
+      groupRef.current.rotation.copy(rotation);
+    }
+    
+    if (trailPositionsRef.current.length >= MAX_TRAIL_POSITIONS) {
+      trailPositionsRef.current.shift();
+    }
+    trailPositionsRef.current.push(position.clone());
+    
+    if (trailGeometryRef.current && trailPositionsRef.current.length > 1) {
+      const positions = new Float32Array(trailPositionsRef.current.length * 3);
+      trailPositionsRef.current.forEach((pos, i) => {
+        positions[i * 3] = pos.x;
+        positions[i * 3 + 1] = pos.y;
+        positions[i * 3 + 2] = pos.z;
+      });
+      trailGeometryRef.current.setAttribute(
+        "position",
+        new THREE.BufferAttribute(positions, 3)
+      );
+      trailGeometryRef.current.setDrawRange(0, trailPositionsRef.current.length);
     }
   });
   
+  const trailColor = useMemo(() => {
+    if (aircraft.status === "descending") return 0x00ff00;
+    if (aircraft.status === "ascending") return 0xffff00;
+    if (aircraft.status === "in_pipeline") return 0xff8800;
+    return aircraft.color;
+  }, [aircraft.status, aircraft.color]);
+  
   return (
-    <group ref={meshRef}>
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <coneGeometry args={[0.1, 0.3, 8]} />
-        <meshStandardMaterial
+    <>
+      <group ref={groupRef}>
+        <mesh ref={meshRef} rotation={[Math.PI / 2, 0, 0]}>
+          <coneGeometry args={[0.1, 0.3, 8]} />
+          <meshStandardMaterial
+            color={aircraft.color}
+            emissive={aircraft.color}
+            emissiveIntensity={0.3}
+          />
+        </mesh>
+        
+        <pointLight
           color={aircraft.color}
-          emissive={aircraft.color}
-          emissiveIntensity={0.3}
+          intensity={0.3}
+          distance={1}
         />
-      </mesh>
+      </group>
       
-      <pointLight
-        color={aircraft.color}
-        intensity={0.3}
-        distance={1}
-      />
-    </group>
+      <line>
+        <bufferGeometry ref={trailGeometryRef}>
+          <bufferAttribute
+            attach="attributes-position"
+            count={MAX_TRAIL_POSITIONS}
+            array={new Float32Array(MAX_TRAIL_POSITIONS * 3)}
+            itemSize={3}
+          />
+        </bufferGeometry>
+        <lineBasicMaterial
+          color={trailColor}
+          transparent
+          opacity={0.4}
+          linewidth={1}
+        />
+      </line>
+    </>
   );
 }
 

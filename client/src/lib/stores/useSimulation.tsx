@@ -6,6 +6,79 @@ export type GateStatus = "GREEN" | "YELLOW" | "RED";
 export type CityName = "San Diego" | "Los Angeles";
 export type QuadrantName = "North" | "East" | "South" | "West";
 export type PipelineName = "N-S" | "E-W";
+export type ScenarioName = "normal" | "rush_hour" | "maintenance" | "emergency";
+
+export interface ScenarioConfig {
+  name: string;
+  description: string;
+  sdAircraftCount: number;
+  laAircraftCount: number;
+  pipelineAircraftCount: number;
+  descentProbability: number;
+  pipelineTransferProbability: number;
+  departureProbability: number;
+  pipelineCapacity: number;
+  disabledGates: string[];
+  alertMessage: string | null;
+}
+
+export const SCENARIO_CONFIGS: Record<ScenarioName, ScenarioConfig> = {
+  normal: {
+    name: "Normal Operations",
+    description: "Standard traffic flow between cities",
+    sdAircraftCount: 50,
+    laAircraftCount: 40,
+    pipelineAircraftCount: 20,
+    descentProbability: 0.015,
+    pipelineTransferProbability: 0.005,
+    departureProbability: 0.03,
+    pipelineCapacity: 30,
+    disabledGates: [],
+    alertMessage: null,
+  },
+  rush_hour: {
+    name: "Rush Hour",
+    description: "Peak traffic with high volume between cities",
+    sdAircraftCount: 80,
+    laAircraftCount: 70,
+    pipelineAircraftCount: 40,
+    descentProbability: 0.025,
+    pipelineTransferProbability: 0.008,
+    departureProbability: 0.04,
+    pipelineCapacity: 40,
+    disabledGates: [],
+    alertMessage: "RUSH HOUR: High traffic volume active",
+  },
+  maintenance: {
+    name: "Scheduled Maintenance",
+    description: "Reduced capacity due to gate maintenance",
+    sdAircraftCount: 30,
+    laAircraftCount: 25,
+    pipelineAircraftCount: 10,
+    descentProbability: 0.01,
+    pipelineTransferProbability: 0.003,
+    departureProbability: 0.02,
+    pipelineCapacity: 20,
+    disabledGates: ["San Diego-NQ-1", "San Diego-NQ-2", "San Diego-NQ-3", "San Diego-NQ-4",
+                    "San Diego-EQ-1", "San Diego-EQ-2", "San Diego-EQ-3", "San Diego-EQ-4",
+                    "Los Angeles-SQ-1", "Los Angeles-SQ-2", "Los Angeles-SQ-3", "Los Angeles-SQ-4",
+                    "Los Angeles-WQ-1", "Los Angeles-WQ-2", "Los Angeles-WQ-3", "Los Angeles-WQ-4"],
+    alertMessage: "MAINTENANCE: 16 gates offline for scheduled maintenance",
+  },
+  emergency: {
+    name: "Emergency Response",
+    description: "Emergency scenario with priority routing",
+    sdAircraftCount: 60,
+    laAircraftCount: 60,
+    pipelineAircraftCount: 30,
+    descentProbability: 0.035,
+    pipelineTransferProbability: 0.012,
+    departureProbability: 0.05,
+    pipelineCapacity: 50,
+    disabledGates: [],
+    alertMessage: "EMERGENCY: Priority routing active - all gates on standby",
+  },
+};
 
 export interface Gate {
   id: string;
@@ -53,6 +126,18 @@ export interface EventLogItem {
   type: "info" | "warning" | "success" | "error";
 }
 
+export interface StatisticsSnapshot {
+  timestamp: number;
+  landingsSD: number;
+  landingsLA: number;
+  departuresSD: number;
+  departuresLA: number;
+  pipelineTransfers: number;
+  avgPipelineUtilization: number;
+  avgGateUtilization: number;
+  reroutings: number;
+}
+
 export interface SimulationState {
   isPlaying: boolean;
   speed: number;
@@ -62,12 +147,23 @@ export interface SimulationState {
   pipelines: Pipeline[];
   events: EventLogItem[];
   selectedScenario: string;
+  selectedGateId: string | null;
+  statistics: StatisticsSnapshot[];
+  currentStats: {
+    landingsSD: number;
+    landingsLA: number;
+    departuresSD: number;
+    departuresLA: number;
+    pipelineTransfers: number;
+    reroutings: number;
+  };
   
   play: () => void;
   pause: () => void;
   reset: () => void;
   setSpeed: (speed: number) => void;
   setScenario: (scenario: string) => void;
+  selectGate: (gateId: string | null) => void;
   
   addAircraft: (aircraft: Aircraft) => void;
   updateAircraft: (id: string, updates: Partial<Aircraft>) => void;
@@ -89,7 +185,7 @@ const GATES_PER_QUADRANT = 28;
 const MAX_ALTITUDE = 1250;
 const GROUND_ALTITUDE = 50;
 
-function createGates(cityId: CityName): Gate[] {
+function createGates(cityId: CityName, disabledGates: string[] = []): Gate[] {
   const gates: Gate[] = [];
   const quadrants: QuadrantName[] = ["North", "East", "South", "West"];
   const quadrantOffsets = { North: 0, East: 90, South: 180, West: 270 };
@@ -99,16 +195,18 @@ function createGates(cityId: CityName): Gate[] {
       const angleWithinQuadrant = (i / GATES_PER_QUADRANT) * 90;
       const angle = quadrantOffsets[quadrant] + angleWithinQuadrant;
       const distance = GATE_MIN_DISTANCE + (i / GATES_PER_QUADRANT) * (GATE_MAX_DISTANCE - GATE_MIN_DISTANCE);
+      const gateId = `${cityId}-${quadrant[0]}Q-${i + 1}`;
+      const isDisabled = disabledGates.includes(gateId);
       
       gates.push({
-        id: `${cityId}-${quadrant[0]}Q-${i + 1}`,
+        id: gateId,
         cityId,
         quadrant,
         index: i,
         angle,
         distance,
-        status: "GREEN",
-        assignedAircraft: null,
+        status: isDisabled ? "RED" : "GREEN",
+        assignedAircraft: isDisabled ? "MAINTENANCE" : null,
         queueCount: 0,
       });
     }
@@ -117,11 +215,11 @@ function createGates(cityId: CityName): Gate[] {
   return gates;
 }
 
-function createInitialAircraft(): Aircraft[] {
+function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal): Aircraft[] {
   const aircraft: Aircraft[] = [];
   let id = 1;
   
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < config.sdAircraftCount; i++) {
     aircraft.push({
       id: `AC-${String(id++).padStart(3, "0")}`,
       status: "in_ring",
@@ -139,7 +237,7 @@ function createInitialAircraft(): Aircraft[] {
     });
   }
   
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < config.laAircraftCount; i++) {
     aircraft.push({
       id: `AC-${String(id++).padStart(3, "0")}`,
       status: "in_ring",
@@ -157,7 +255,9 @@ function createInitialAircraft(): Aircraft[] {
     });
   }
   
-  for (let i = 0; i < 10; i++) {
+  const pipelineCount = Math.floor(config.pipelineAircraftCount / 2);
+  
+  for (let i = 0; i < pipelineCount; i++) {
     aircraft.push({
       id: `AC-${String(id++).padStart(3, "0")}`,
       status: "in_pipeline",
@@ -175,7 +275,7 @@ function createInitialAircraft(): Aircraft[] {
     });
   }
   
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < pipelineCount; i++) {
     aircraft.push({
       id: `AC-${String(id++).padStart(3, "0")}`,
       status: "in_pipeline",
@@ -196,39 +296,53 @@ function createInitialAircraft(): Aircraft[] {
   return aircraft;
 }
 
-const initialPipelines: Pipeline[] = [
-  {
-    id: "N-S",
-    fromCity: "San Diego",
-    toCity: "Los Angeles",
-    fromQuadrant: "North",
-    toQuadrant: "North",
-    capacity: 30,
-    currentCount: 10,
-    transitTime: 70,
-  },
-  {
-    id: "E-W",
-    fromCity: "San Diego",
-    toCity: "Los Angeles",
-    fromQuadrant: "East",
-    toQuadrant: "West",
-    capacity: 30,
-    currentCount: 10,
-    transitTime: 70,
-  },
-];
+function createPipelines(config: ScenarioConfig = SCENARIO_CONFIGS.normal): Pipeline[] {
+  return [
+    {
+      id: "N-S",
+      fromCity: "San Diego",
+      toCity: "Los Angeles",
+      fromQuadrant: "North",
+      toQuadrant: "North",
+      capacity: config.pipelineCapacity,
+      currentCount: Math.floor(config.pipelineAircraftCount / 2),
+      transitTime: 70,
+    },
+    {
+      id: "E-W",
+      fromCity: "San Diego",
+      toCity: "Los Angeles",
+      fromQuadrant: "East",
+      toQuadrant: "West",
+      capacity: config.pipelineCapacity,
+      currentCount: Math.floor(config.pipelineAircraftCount / 2),
+      transitTime: 70,
+    },
+  ];
+}
+
+const defaultConfig = SCENARIO_CONFIGS.normal;
 
 export const useSimulation = create<SimulationState>()(
   subscribeWithSelector((set, get) => ({
     isPlaying: false,
     speed: 1,
     simulationTime: new Date(),
-    aircraft: createInitialAircraft(),
-    gates: [...createGates("San Diego"), ...createGates("Los Angeles")],
-    pipelines: initialPipelines,
+    aircraft: createInitialAircraft(defaultConfig),
+    gates: [...createGates("San Diego", defaultConfig.disabledGates), ...createGates("Los Angeles", defaultConfig.disabledGates)],
+    pipelines: createPipelines(defaultConfig),
     events: [],
     selectedScenario: "normal",
+    selectedGateId: null,
+    statistics: [],
+    currentStats: {
+      landingsSD: 0,
+      landingsLA: 0,
+      departuresSD: 0,
+      departuresLA: 0,
+      pipelineTransfers: 0,
+      reroutings: 0,
+    },
     
     play: () => {
       set({ isPlaying: true });
@@ -241,14 +355,25 @@ export const useSimulation = create<SimulationState>()(
     },
     
     reset: () => {
+      const currentScenario = get().selectedScenario as ScenarioName;
+      const config = SCENARIO_CONFIGS[currentScenario] || defaultConfig;
       set({
         isPlaying: false,
         speed: 1,
         simulationTime: new Date(),
-        aircraft: createInitialAircraft(),
-        gates: [...createGates("San Diego"), ...createGates("Los Angeles")],
-        pipelines: initialPipelines,
+        aircraft: createInitialAircraft(config),
+        gates: [...createGates("San Diego", config.disabledGates), ...createGates("Los Angeles", config.disabledGates)],
+        pipelines: createPipelines(config),
         events: [],
+        statistics: [],
+        currentStats: {
+          landingsSD: 0,
+          landingsLA: 0,
+          departuresSD: 0,
+          departuresLA: 0,
+          pipelineTransfers: 0,
+          reroutings: 0,
+        },
       });
     },
     
@@ -258,8 +383,34 @@ export const useSimulation = create<SimulationState>()(
     },
     
     setScenario: (scenario: string) => {
-      set({ selectedScenario: scenario });
-      get().addEvent(`Scenario changed to: ${scenario}`, "info");
+      const config = SCENARIO_CONFIGS[scenario as ScenarioName] || defaultConfig;
+      set({
+        selectedScenario: scenario,
+        isPlaying: false,
+        simulationTime: new Date(),
+        aircraft: createInitialAircraft(config),
+        gates: [...createGates("San Diego", config.disabledGates), ...createGates("Los Angeles", config.disabledGates)],
+        pipelines: createPipelines(config),
+        events: [],
+        selectedGateId: null,
+        statistics: [],
+        currentStats: {
+          landingsSD: 0,
+          landingsLA: 0,
+          departuresSD: 0,
+          departuresLA: 0,
+          pipelineTransfers: 0,
+          reroutings: 0,
+        },
+      });
+      get().addEvent(`Scenario changed to: ${config.name}`, "info");
+      if (config.alertMessage) {
+        get().addEvent(config.alertMessage, "warning");
+      }
+    },
+    
+    selectGate: (gateId: string | null) => {
+      set({ selectedGateId: gateId });
     },
     
     addAircraft: (aircraft: Aircraft) => {
@@ -316,6 +467,7 @@ export const useSimulation = create<SimulationState>()(
       const state = get();
       if (!state.isPlaying) return;
       
+      const scenarioConfig = SCENARIO_CONFIGS[state.selectedScenario as ScenarioName] || defaultConfig;
       const adjustedDelta = deltaTime * state.speed;
       const newEvents: { message: string; type: "info" | "warning" | "success" | "error" }[] = [];
       
@@ -335,16 +487,25 @@ export const useSimulation = create<SimulationState>()(
         const updatedAircraft: Aircraft[] = [];
         const newReservedGates = new Set<string>(reservedGates);
         const newPipelineCounts = { ...pipelineCounts };
+        const statsUpdates = {
+          landingsSD: 0,
+          landingsLA: 0,
+          departuresSD: 0,
+          departuresLA: 0,
+          pipelineTransfers: 0,
+          reroutings: 0,
+        };
         
         for (const aircraft of prevState.aircraft) {
           if (aircraft.status === "in_ring" && aircraft.cityId) {
             let newAngle = aircraft.angleOnRing + aircraft.speed * adjustedDelta * 25;
             if (newAngle >= 360) newAngle -= 360;
             
-            if (Math.random() < 0.015 * adjustedDelta) {
+            if (Math.random() < scenarioConfig.descentProbability * adjustedDelta) {
               const availableGates = prevState.gates.filter(
                 (g) => g.cityId === aircraft.cityId && 
-                       !newReservedGates.has(g.id)
+                       !newReservedGates.has(g.id) &&
+                       g.assignedAircraft !== "MAINTENANCE"
               );
               
               if (availableGates.length > 0) {
@@ -366,26 +527,49 @@ export const useSimulation = create<SimulationState>()(
               }
             }
             
-            if (Math.random() < 0.005 * adjustedDelta) {
-              const availablePipeline = prevState.pipelines.find(
+            if (Math.random() < scenarioConfig.pipelineTransferProbability * adjustedDelta) {
+              const availablePipelines = prevState.pipelines.filter(
                 (p) => p.fromCity === aircraft.cityId && 
                        newPipelineCounts[p.id] < p.capacity
               );
               
-              if (availablePipeline) {
-                newPipelineCounts[availablePipeline.id]++;
-                newEvents.push({
-                  message: `${aircraft.id} entering ${availablePipeline.id} pipeline`,
-                  type: "info"
-                });
+              if (availablePipelines.length > 0) {
+                const pipelinesWithUtilization = availablePipelines.map((p) => ({
+                  pipeline: p,
+                  utilization: newPipelineCounts[p.id] / p.capacity,
+                }));
+                pipelinesWithUtilization.sort((a, b) => a.utilization - b.utilization);
+                
+                const selectedPipeline = pipelinesWithUtilization[0].pipeline;
+                const wasRerouted = pipelinesWithUtilization.length > 1 && 
+                                   pipelinesWithUtilization[1].utilization > 0.8 &&
+                                   pipelinesWithUtilization[0].utilization < 0.5;
+                
+                newPipelineCounts[selectedPipeline.id]++;
+                
+                statsUpdates.pipelineTransfers++;
+                
+                if (wasRerouted) {
+                  newEvents.push({
+                    message: `${aircraft.id} rerouted to ${selectedPipeline.id} (less congested)`,
+                    type: "warning"
+                  });
+                  statsUpdates.reroutings++;
+                } else {
+                  newEvents.push({
+                    message: `${aircraft.id} entering ${selectedPipeline.id} pipeline`,
+                    type: "info"
+                  });
+                }
+                
                 updatedAircraft.push({
                   ...aircraft,
                   status: "in_pipeline",
                   originCity: aircraft.cityId,
                   cityId: null,
-                  pipelineId: availablePipeline.id,
+                  pipelineId: selectedPipeline.id,
                   pipelineProgress: 0,
-                  color: 0xFFB347,
+                  color: wasRerouted ? 0xff00ff : 0xFFB347,
                 });
                 continue;
               }
@@ -424,6 +608,11 @@ export const useSimulation = create<SimulationState>()(
                 message: `${aircraft.id} landed at ${aircraft.targetGate}`,
                 type: "success"
               });
+              if (aircraft.originCity === "San Diego") {
+                statsUpdates.landingsSD++;
+              } else if (aircraft.originCity === "Los Angeles") {
+                statsUpdates.landingsLA++;
+              }
               updatedAircraft.push({
                 ...aircraft,
                 altitude: GROUND_ALTITUDE,
@@ -445,13 +634,18 @@ export const useSimulation = create<SimulationState>()(
           }
           
           if (aircraft.status === "landed") {
-            if (Math.random() < 0.03 * adjustedDelta) {
+            if (Math.random() < scenarioConfig.departureProbability * adjustedDelta) {
               const gateId = aircraft.targetGate;
               newReservedGates.delete(gateId || "");
               newEvents.push({
                 message: `${aircraft.id} departing from ${gateId}`,
                 type: "info"
               });
+              if (aircraft.originCity === "San Diego") {
+                statsUpdates.departuresSD++;
+              } else if (aircraft.originCity === "Los Angeles") {
+                statsUpdates.departuresLA++;
+              }
               updatedAircraft.push({
                 ...aircraft,
                 status: "ascending",
@@ -582,6 +776,14 @@ export const useSimulation = create<SimulationState>()(
           pipelines: updatedPipelines,
           simulationTime: newSimTime,
           events: [...newEventItems, ...prevState.events].slice(0, 100),
+          currentStats: {
+            landingsSD: prevState.currentStats.landingsSD + statsUpdates.landingsSD,
+            landingsLA: prevState.currentStats.landingsLA + statsUpdates.landingsLA,
+            departuresSD: prevState.currentStats.departuresSD + statsUpdates.departuresSD,
+            departuresLA: prevState.currentStats.departuresLA + statsUpdates.departuresLA,
+            pipelineTransfers: prevState.currentStats.pipelineTransfers + statsUpdates.pipelineTransfers,
+            reroutings: prevState.currentStats.reroutings + statsUpdates.reroutings,
+          },
         };
       });
     },

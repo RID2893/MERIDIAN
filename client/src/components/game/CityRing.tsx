@@ -1,6 +1,6 @@
-import { useRef, useMemo, useCallback } from "react";
+import { useRef, useMemo, useState } from "react";
 import * as THREE from "three";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, ThreeEvent } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import { useSimulation, type CityName, type Gate } from "@/lib/stores/useSimulation";
 import { useShallow } from "zustand/react/shallow";
@@ -12,6 +12,10 @@ interface CityRingProps {
 
 function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number, number, number] }) {
   const meshRef = useRef<THREE.Mesh>(null);
+  const [hovered, setHovered] = useState(false);
+  const selectGate = useSimulation((state) => state.selectGate);
+  const selectedGateId = useSimulation((state) => state.selectedGateId);
+  const isSelected = selectedGateId === gate.id;
   
   const color = useMemo(() => {
     switch (gate.status) {
@@ -30,13 +34,34 @@ function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number,
     return [x, y, z] as [number, number, number];
   }, [gate.angle, gate.distance, cityPosition]);
   
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    selectGate(isSelected ? null : gate.id);
+  };
+  
+  const scale = hovered || isSelected ? 1.5 : 1;
+  
   return (
-    <mesh ref={meshRef} position={gatePosition}>
+    <mesh
+      ref={meshRef}
+      position={gatePosition}
+      onClick={handleClick}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+        document.body.style.cursor = "pointer";
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        document.body.style.cursor = "auto";
+      }}
+      scale={scale}
+    >
       <sphereGeometry args={[0.08, 16, 16]} />
       <meshStandardMaterial
-        color={color}
-        emissive={color}
-        emissiveIntensity={0.5}
+        color={isSelected ? 0xffffff : color}
+        emissive={isSelected ? 0xffffff : color}
+        emissiveIntensity={isSelected ? 1 : hovered ? 0.8 : 0.5}
       />
     </mesh>
   );

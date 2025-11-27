@@ -13,10 +13,10 @@ const LA_POSITION: [number, number, number] = [12, 0, 8];
 function Lights() {
   return (
     <>
-      <ambientLight intensity={0.4} color={0x0088ff} />
+      <ambientLight intensity={1.2} color={0x00ffff} />
       <directionalLight
-        position={[10, 20, 10]}
-        intensity={0.6}
+        position={[10, 30, 10]}
+        intensity={1.5}
         color={0xffffff}
         castShadow
         shadow-mapSize={[2048, 2048]}
@@ -26,8 +26,9 @@ function Lights() {
         shadow-camera-top={30}
         shadow-camera-bottom={-30}
       />
-      <pointLight position={SD_POSITION} intensity={0.3} color={0x00ffff} distance={20} />
-      <pointLight position={LA_POSITION} intensity={0.3} color={0x00ffff} distance={20} />
+      <pointLight position={SD_POSITION} intensity={1} color={0x00ffff} distance={40} />
+      <pointLight position={LA_POSITION} intensity={1} color={0x00ffff} distance={40} />
+      <pointLight position={[0, 15, 0]} intensity={1} color={0xffffff} distance={50} />
     </>
   );
 }

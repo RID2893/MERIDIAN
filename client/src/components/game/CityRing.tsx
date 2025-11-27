@@ -93,15 +93,17 @@ export function CityRing({ cityId, position }: CityRingProps) {
   return (
     <group position={position}>
       <line ref={ringRef as any} geometry={ringGeometry}>
-        <lineBasicMaterial color={0x00ffff} linewidth={2} />
+        <lineBasicMaterial color={0x00ffff} linewidth={3} />
       </line>
       
       <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[5.8, 6.2, 128]} />
-        <meshBasicMaterial
+        <meshStandardMaterial
           color={0x00ffff}
+          emissive={0x00ffff}
+          emissiveIntensity={0.8}
           transparent
-          opacity={0.3}
+          opacity={0.5}
           side={THREE.DoubleSide}
         />
       </mesh>

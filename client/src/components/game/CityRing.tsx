@@ -1,0 +1,114 @@
+import { useRef, useMemo, useCallback } from "react";
+import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
+import { Text } from "@react-three/drei";
+import { useSimulation, type CityName, type Gate } from "@/lib/stores/useSimulation";
+import { useShallow } from "zustand/react/shallow";
+
+interface CityRingProps {
+  cityId: CityName;
+  position: [number, number, number];
+}
+
+function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number, number, number] }) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  
+  const color = useMemo(() => {
+    switch (gate.status) {
+      case "GREEN": return 0x00ff00;
+      case "YELLOW": return 0xffff00;
+      case "RED": return 0xff0000;
+      default: return 0x00ff00;
+    }
+  }, [gate.status]);
+  
+  const gatePosition = useMemo(() => {
+    const angleRad = (gate.angle * Math.PI) / 180;
+    const x = cityPosition[0] + Math.cos(angleRad) * gate.distance;
+    const z = cityPosition[2] + Math.sin(angleRad) * gate.distance;
+    const y = cityPosition[1] + 0.1;
+    return [x, y, z] as [number, number, number];
+  }, [gate.angle, gate.distance, cityPosition]);
+  
+  return (
+    <mesh ref={meshRef} position={gatePosition}>
+      <sphereGeometry args={[0.08, 16, 16]} />
+      <meshStandardMaterial
+        color={color}
+        emissive={color}
+        emissiveIntensity={0.5}
+      />
+    </mesh>
+  );
+}
+
+export function CityRing({ cityId, position }: CityRingProps) {
+  const ringRef = useRef<THREE.Mesh>(null);
+  const glowRef = useRef<THREE.Mesh>(null);
+  
+  const gates = useSimulation(
+    useShallow((state) => state.gates.filter((g) => g.cityId === cityId))
+  );
+  
+  const ringGeometry = useMemo(() => {
+    const curve = new THREE.EllipseCurve(0, 0, 6, 6, 0, 2 * Math.PI, false, 0);
+    const points = curve.getPoints(128);
+    const geometry = new THREE.BufferGeometry().setFromPoints(
+      points.map((p) => new THREE.Vector3(p.x, 0, p.y))
+    );
+    return geometry;
+  }, []);
+  
+  useFrame((state) => {
+    if (glowRef.current) {
+      const material = glowRef.current.material as THREE.MeshBasicMaterial;
+      material.opacity = 0.3 + Math.sin(state.clock.elapsedTime * 2) * 0.1;
+    }
+  });
+  
+  return (
+    <group position={position}>
+      <line ref={ringRef as any} geometry={ringGeometry}>
+        <lineBasicMaterial color={0x00ffff} linewidth={2} />
+      </line>
+      
+      <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[5.8, 6.2, 128]} />
+        <meshBasicMaterial
+          color={0x00ffff}
+          transparent
+          opacity={0.3}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      
+      {gates.map((gate) => (
+        <GateSphere key={gate.id} gate={gate} cityPosition={position} />
+      ))}
+      
+      <Text
+        position={[0, 3, 0]}
+        fontSize={0.8}
+        color="#00ffff"
+        anchorX="center"
+        anchorY="middle"
+        font="/fonts/inter.json"
+      >
+        {cityId.toUpperCase()}
+      </Text>
+      
+      <Text position={[0, 2.2, -7]} fontSize={0.4} color="#888888" anchorX="center">
+        N
+      </Text>
+      <Text position={[7, 2.2, 0]} fontSize={0.4} color="#888888" anchorX="center">
+        E
+      </Text>
+      <Text position={[0, 2.2, 7]} fontSize={0.4} color="#888888" anchorX="center">
+        S
+      </Text>
+      <Text position={[-7, 2.2, 0]} fontSize={0.4} color="#888888" anchorX="center">
+        W
+      </Text>
+    </group>
+  );
+}

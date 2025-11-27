@@ -27,9 +27,9 @@ function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number,
   
   const gatePosition = useMemo(() => {
     const angleRad = (gate.angle * Math.PI) / 180;
-    const x = cityPosition[0] + Math.cos(angleRad) * 4.5;
-    const z = cityPosition[2] + Math.sin(angleRad) * 4.5;
-    const y = cityPosition[1] + 0.3;
+    const x = cityPosition[0] + Math.cos(angleRad) * 6;
+    const z = cityPosition[2] + Math.sin(angleRad) * 6;
+    const y = cityPosition[1];
     return [x, y, z] as [number, number, number];
   }, [gate.angle, cityPosition]);
   
@@ -56,13 +56,11 @@ function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number,
       }}
       scale={scale}
     >
-      <sphereGeometry args={[0.35, 16, 16]} />
+      <sphereGeometry args={[0.15, 16, 16]} />
       <meshStandardMaterial
         color={isSelected ? 0xffffff : color}
         emissive={isSelected ? 0xffffff : color}
-        emissiveIntensity={isSelected ? 1 : hovered ? 0.8 : 0.6}
-        transparent
-        depthTest={true}
+        emissiveIntensity={isSelected ? 1 : hovered ? 0.8 : 0.4}
       />
     </mesh>
   );

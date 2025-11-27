@@ -1,7 +1,6 @@
 import { useRef, useMemo, useState } from "react";
 import * as THREE from "three";
 import { useFrame, ThreeEvent } from "@react-three/fiber";
-import { Text } from "@react-three/drei";
 import { useSimulation, type CityName, type Gate } from "@/lib/stores/useSimulation";
 import { useShallow } from "zustand/react/shallow";
 
@@ -111,29 +110,6 @@ export function CityRing({ cityId, position }: CityRingProps) {
         <GateSphere key={gate.id} gate={gate} cityPosition={position} />
       ))}
       
-      <Text
-        position={[0, 3, 0]}
-        fontSize={0.8}
-        color="#00ffff"
-        anchorX="center"
-        anchorY="middle"
-        font="/fonts/inter.json"
-      >
-        {cityId.toUpperCase()}
-      </Text>
-      
-      <Text position={[0, 2.2, -7]} fontSize={0.4} color="#888888" anchorX="center">
-        N
-      </Text>
-      <Text position={[7, 2.2, 0]} fontSize={0.4} color="#888888" anchorX="center">
-        E
-      </Text>
-      <Text position={[0, 2.2, 7]} fontSize={0.4} color="#888888" anchorX="center">
-        S
-      </Text>
-      <Text position={[-7, 2.2, 0]} fontSize={0.4} color="#888888" anchorX="center">
-        W
-      </Text>
     </group>
   );
 }

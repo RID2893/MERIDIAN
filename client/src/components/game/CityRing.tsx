@@ -56,11 +56,13 @@ function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number,
       }}
       scale={scale}
     >
-      <sphereGeometry args={[0.2, 16, 16]} />
+      <sphereGeometry args={[0.35, 16, 16]} />
       <meshStandardMaterial
         color={isSelected ? 0xffffff : color}
         emissive={isSelected ? 0xffffff : color}
-        emissiveIntensity={isSelected ? 1 : hovered ? 0.8 : 0.5}
+        emissiveIntensity={isSelected ? 1 : hovered ? 0.8 : 0.6}
+        transparent
+        depthTest={true}
       />
     </mesh>
   );

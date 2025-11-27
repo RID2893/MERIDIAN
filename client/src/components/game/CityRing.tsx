@@ -29,7 +29,7 @@ function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number,
     const angleRad = (gate.angle * Math.PI) / 180;
     const x = cityPosition[0] + Math.cos(angleRad) * gate.distance;
     const z = cityPosition[2] + Math.sin(angleRad) * gate.distance;
-    const y = cityPosition[1] + 0.1;
+    const y = cityPosition[1] + 0.5;
     return [x, y, z] as [number, number, number];
   }, [gate.angle, gate.distance, cityPosition]);
   
@@ -56,7 +56,7 @@ function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number,
       }}
       scale={scale}
     >
-      <sphereGeometry args={[0.08, 16, 16]} />
+      <sphereGeometry args={[0.2, 16, 16]} />
       <meshStandardMaterial
         color={isSelected ? 0xffffff : color}
         emissive={isSelected ? 0xffffff : color}

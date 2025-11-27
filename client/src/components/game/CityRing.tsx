@@ -27,11 +27,11 @@ function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number,
   
   const gatePosition = useMemo(() => {
     const angleRad = (gate.angle * Math.PI) / 180;
-    const x = cityPosition[0] + Math.cos(angleRad) * gate.distance;
-    const z = cityPosition[2] + Math.sin(angleRad) * gate.distance;
-    const y = cityPosition[1];
+    const x = cityPosition[0] + Math.cos(angleRad) * 6;
+    const z = cityPosition[2] + Math.sin(angleRad) * 6;
+    const y = cityPosition[1] + 0.3;
     return [x, y, z] as [number, number, number];
-  }, [gate.angle, gate.distance, cityPosition]);
+  }, [gate.angle, cityPosition]);
   
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
@@ -92,9 +92,9 @@ export function CityRing({ cityId, position }: CityRingProps) {
   
   return (
     <group position={position}>
-      <line ref={ringRef as any} geometry={ringGeometry}>
+      <lineSegments ref={ringRef as any} geometry={ringGeometry}>
         <lineBasicMaterial color={0x00ffff} linewidth={3} />
-      </line>
+      </lineSegments>
       
       <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[5.8, 6.2, 128]} />

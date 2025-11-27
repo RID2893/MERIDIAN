@@ -496,6 +496,7 @@ function EventLog() {
 }
 
 function StatisticsPanel() {
+  const [collapsed, setCollapsed] = useState(true);
   const aircraft = useSimulation((state) => state.aircraft);
   const gates = useSimulation((state) => state.gates);
   const pipelines = useSimulation((state) => state.pipelines);
@@ -544,11 +545,30 @@ function StatisticsPanel() {
         zIndex: 1000,
         pointerEvents: "auto",
         fontSize: "11px",
+        maxHeight: collapsed ? "30px" : "600px",
+        overflow: collapsed ? "hidden" : "auto",
+        transition: "max-height 0.3s",
       }}
     >
-      <h3 style={{ color: "#00ffff", fontSize: "13px", marginBottom: "10px", borderBottom: "1px solid #00ffff33", paddingBottom: "6px" }}>
-        LIVE STATISTICS
-      </h3>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+        <h3 style={{ color: "#00ffff", fontSize: "13px", margin: 0, borderBottom: "1px solid #00ffff33", paddingBottom: "6px" }}>
+          LIVE STATISTICS
+        </h3>
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "#00ffff",
+            cursor: "pointer",
+            fontSize: "12px",
+            padding: 0,
+          }}
+        >
+          {collapsed ? "▼" : "▲"}
+        </button>
+      </div>
+      {!collapsed && (
       
       <div style={{ marginBottom: "12px" }}>
         <div style={{ color: "#888888", marginBottom: "4px" }}>Aircraft Status</div>
@@ -661,6 +681,7 @@ function StatisticsPanel() {
           <span style={{ color: "#ffaa00" }}>{currentStats.departuresLA}</span>
         </div>
       </div>
+      )}
     </div>
   );
 }

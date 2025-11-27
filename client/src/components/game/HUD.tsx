@@ -569,7 +569,7 @@ function StatisticsPanel() {
         </button>
       </div>
       {!collapsed && (
-      
+        <>
       <div style={{ marginBottom: "12px" }}>
         <div style={{ color: "#888888", marginBottom: "4px" }}>Aircraft Status</div>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
@@ -681,6 +681,7 @@ function StatisticsPanel() {
           <span style={{ color: "#ffaa00" }}>{currentStats.departuresLA}</span>
         </div>
       </div>
+        </>
       )}
     </div>
   );

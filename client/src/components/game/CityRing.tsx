@@ -29,11 +29,11 @@ function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number,
   
   const gatePosition = useMemo(() => {
     const angleRad = (gate.angle * Math.PI) / 180;
-    const x = cityPosition[0] + Math.cos(angleRad) * RING_RADIUS;
-    const z = cityPosition[2] + Math.sin(angleRad) * RING_RADIUS;
-    const y = cityPosition[1];
+    const x = Math.cos(angleRad) * RING_RADIUS;
+    const z = Math.sin(angleRad) * RING_RADIUS;
+    const y = 0;
     return [x, y, z] as [number, number, number];
-  }, [gate.angle, cityPosition]);
+  }, [gate.angle]);
   
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();

@@ -1,0 +1,56 @@
+import React, { useMemo } from 'react';
+import { Text } from '@react-three/drei';
+import * as THREE from 'three';
+
+// Pipeline configuration
+const PIPELINE_CONFIG = {
+  CENTER: { name: 'Main', color: 0xff00ff, altitude: 1.5, capacity: 40, width: 0.3, offset: 0 },
+  TOP: { name: 'Upper', color: 0xffa500, altitude: 2.0, capacity: 30, width: 0.25, offset: 200 },
+  BOTTOM: { name: 'Lower', color: 0x00ffff, altitude: 1.0, capacity: 30, width: 0.25, offset: -200 }
+};
+
+// Create curves
+const createPipelineCurve = (start, end, alt, offset) => {
+  return new THREE.CatmullRomCurve3([
+    new THREE.Vector3(start, alt, start),
+    new THREE.Vector3((start + end) / 2 + offset, alt, (start + end) / 2 + offset),
+    new THREE.Vector3(end, alt, end)
+  ]);
+};
+
+// Component
+const TriplePipelineSystem = () => {
+  const centerCurve = useMemo(() => createPipelineCurve([0, 0, 0], [1200, 0, 400], 1.5, 0), []);
+  const topCurve = useMemo(() => createPipelineCurve([0, 0, 0], [1200, 0, 400], 2.0, 200), []);
+  const bottomCurve = useMemo(() => createPipelineCurve([0, 0, 0], [1200, 0, 400], 1.0, -200), []);
+
+  return (
+    <group>
+      <PipelineRenderer curve={centerCurve} config={PIPELINE_CONFIG.CENTER} />
+      <PipelineRenderer curve={topCurve} config={PIPELINE_CONFIG.TOP} />
+      <PipelineRenderer curve={bottomCurve} config={PIPELINE_CONFIG.BOTTOM} />
+    </group>
+  );
+};
+
+const PipelineRenderer = ({ curve, config }) => {
+  const points = curve.getPoints(100);
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+  return (
+    <group>
+      <lineSegments geometry={geometry}>
+        <lineBasicMaterial color={config.color} linewidth={2} />
+      </lineSegments>
+      <mesh>
+        <tubeGeometry args={[curve, 20, config.width, 8, false]} />
+        <meshStandardMaterial color={config.color} transparent opacity={0.3} />
+      </mesh>
+      <Text position={[points.x, points.y + 0.5, points.z]} fontSize={0.25} color={config.color}>
+        {config.name}
+      </Text>
+    </group>
+  );
+};
+
+export default TriplePipelineSystem;

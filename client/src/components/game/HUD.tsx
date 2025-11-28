@@ -533,10 +533,10 @@ function StatisticsPanel() {
   return (
     <div
       style={{
-        position: "absolute",
-        top: "50%",
-        left: "10px",
-        transform: "translateY(-50%)",
+        position: "fixed",
+        bottom: "80px",
+        left: "50%",
+        transform: "translateX(-50%)",
         background: "rgba(0, 0, 0, 0.9)",
         border: "1px solid #00ffff",
         borderRadius: "8px",

@@ -92,6 +92,10 @@ canvas {
   pointer-events: auto;
   width: fit-content;
   align-items: center;
+  position: fixed;
+  bottom: 8px;
+  right: 8px;
+  z-index: 1000;
 }
 
 .control-group {

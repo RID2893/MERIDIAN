@@ -143,6 +143,19 @@ export function CityRing({ cityId, position }: CityRingProps) {
       <Text position={[-6.8, 0.1, 0]} fontSize={0.6} color={0x00ffff} anchorX="center" anchorY="middle">
         W
       </Text>
+      
+      {/* City Name */}
+      <Text position={[0, 0.1, 0]} fontSize={0.8} color={0x00ffff} anchorX="center" anchorY="middle" outlineWidth={0.03} outlineColor={0x000000}>
+        {cityId === "San Diego" ? "SAN DIEGO" : "ORANGE COUNTY"}
+      </Text>
+      
+      {/* Quadrant Dividers */}
+      <lineSegments>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" count={4} array={new Float32Array([0, 0.05, -6, 0, 0.05, 6, -6, 0.05, 0, 6, 0.05, 0])} itemSize={3} />
+        </bufferGeometry>
+        <lineBasicMaterial color={0x00ffff} linewidth={2} opacity={0.5} transparent />
+      </lineSegments>
     </group>
   );
 }

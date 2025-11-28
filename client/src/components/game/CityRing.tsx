@@ -22,7 +22,7 @@ function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number,
   const color = useMemo(() => {
     switch (gate.status) {
       case "GREEN": return 0x00ff00;
-      case "YELLOW": return 0xffff00;
+      case "YELLOW": return 0xffa500;
       case "RED": return 0xff0000;
       default: return 0x00ff00;
     }

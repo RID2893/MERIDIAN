@@ -5,7 +5,8 @@ export type AircraftStatus = "in_ring" | "descending" | "landed" | "in_pipeline"
 export type GateStatus = "GREEN" | "YELLOW" | "RED";
 export type CityName = "San Diego" | "Los Angeles";
 export type QuadrantName = "North" | "East" | "South" | "West";
-export type PipelineName = "N-S" | "E-W";
+export type PipelineVariant = "CENTER" | "TOP" | "BOTTOM";
+export type PipelineName = "N-S-CENTER" | "N-S-TOP" | "N-S-BOTTOM" | "E-W-CENTER" | "E-W-TOP" | "E-W-BOTTOM";
 export type ScenarioName = "normal" | "rush_hour" | "maintenance" | "emergency";
 
 export interface ScenarioConfig {
@@ -114,9 +115,12 @@ export interface Pipeline {
   toCity: CityName;
   fromQuadrant: QuadrantName;
   toQuadrant: QuadrantName;
+  variant: PipelineVariant;
   capacity: number;
   currentCount: number;
   transitTime: number;
+  color: number;
+  altitude: number;
 }
 
 export interface EventLogItem {
@@ -253,70 +257,93 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
     });
   }
   
-  const pipelineCount = Math.floor(config.pipelineAircraftCount / 2);
+  const variants: PipelineVariant[] = ["CENTER", "TOP", "BOTTOM"];
+  const aircraftPerVariant = Math.floor(config.pipelineAircraftCount / 6);
   
-  for (let i = 0; i < pipelineCount; i++) {
-    aircraft.push({
-      id: `AC-${String(id++).padStart(3, "0")}`,
-      status: "in_pipeline",
-      cityId: null,
-      pipelineId: "N-S",
-      angleOnRing: 0,
-      distanceFromCenter: 0,
-      altitude: 1700,
-      targetGate: null,
-      pipelineProgress: Math.random(),
-      color: 0xFFB347,
-      speed: 0.3 + Math.random() * 0.2,
-      descentStartTime: null,
-      originCity: "San Diego",
-    });
-  }
+  variants.forEach((variant) => {
+    for (let i = 0; i < aircraftPerVariant; i++) {
+      aircraft.push({
+        id: `AC-${String(id++).padStart(3, "0")}`,
+        status: "in_pipeline",
+        cityId: null,
+        pipelineId: `N-S-${variant}` as PipelineName,
+        angleOnRing: 0,
+        distanceFromCenter: 0,
+        altitude: variant === "CENTER" ? 1.5 : variant === "TOP" ? 2.0 : 1.0,
+        targetGate: null,
+        pipelineProgress: Math.random(),
+        color: 0xFFB347,
+        speed: 0.3 + Math.random() * 0.2,
+        descentStartTime: null,
+        originCity: "San Diego",
+      });
+    }
+  });
   
-  for (let i = 0; i < pipelineCount; i++) {
-    aircraft.push({
-      id: `AC-${String(id++).padStart(3, "0")}`,
-      status: "in_pipeline",
-      cityId: null,
-      pipelineId: "E-W",
-      angleOnRing: 0,
-      distanceFromCenter: 0,
-      altitude: 1600,
-      targetGate: null,
-      pipelineProgress: Math.random(),
-      color: 0xFFB347,
-      speed: 0.3 + Math.random() * 0.2,
-      descentStartTime: null,
-      originCity: "San Diego",
-    });
-  }
+  variants.forEach((variant) => {
+    for (let i = 0; i < aircraftPerVariant; i++) {
+      aircraft.push({
+        id: `AC-${String(id++).padStart(3, "0")}`,
+        status: "in_pipeline",
+        cityId: null,
+        pipelineId: `E-W-${variant}` as PipelineName,
+        angleOnRing: 0,
+        distanceFromCenter: 0,
+        altitude: variant === "CENTER" ? 1.5 : variant === "TOP" ? 2.0 : 1.0,
+        targetGate: null,
+        pipelineProgress: Math.random(),
+        color: 0xFFB347,
+        speed: 0.3 + Math.random() * 0.2,
+        descentStartTime: null,
+        originCity: "San Diego",
+      });
+    }
+  });
   
   return aircraft;
 }
 
 function createPipelines(config: ScenarioConfig = SCENARIO_CONFIGS.normal): Pipeline[] {
-  return [
-    {
-      id: "N-S",
+  const pipelineVariants: Array<{ variant: PipelineVariant; color: number; altitude: number; capacity: number }> = [
+    { variant: "CENTER", color: 0xff00ff, altitude: 1.5, capacity: config.pipelineCapacity },
+    { variant: "TOP", color: 0xffa500, altitude: 2.0, capacity: Math.floor(config.pipelineCapacity * 0.75) },
+    { variant: "BOTTOM", color: 0x00ffff, altitude: 1.0, capacity: Math.floor(config.pipelineCapacity * 0.75) },
+  ];
+  
+  const pipelines: Pipeline[] = [];
+  const aircraftPerPipeline = Math.floor(config.pipelineAircraftCount / 6);
+  
+  pipelineVariants.forEach((variant) => {
+    pipelines.push({
+      id: `N-S-${variant.variant}` as PipelineName,
       fromCity: "San Diego",
       toCity: "Los Angeles",
       fromQuadrant: "North",
       toQuadrant: "North",
-      capacity: config.pipelineCapacity,
-      currentCount: Math.floor(config.pipelineAircraftCount / 2),
+      variant: variant.variant,
+      capacity: variant.capacity,
+      currentCount: aircraftPerPipeline,
       transitTime: 70,
-    },
-    {
-      id: "E-W",
+      color: variant.color,
+      altitude: variant.altitude,
+    });
+    
+    pipelines.push({
+      id: `E-W-${variant.variant}` as PipelineName,
       fromCity: "San Diego",
       toCity: "Los Angeles",
       fromQuadrant: "East",
       toQuadrant: "West",
-      capacity: config.pipelineCapacity,
-      currentCount: Math.floor(config.pipelineAircraftCount / 2),
+      variant: variant.variant,
+      capacity: variant.capacity,
+      currentCount: aircraftPerPipeline,
       transitTime: 70,
-    },
-  ];
+      color: variant.color,
+      altitude: variant.altitude,
+    });
+  });
+  
+  return pipelines;
 }
 
 const defaultConfig = SCENARIO_CONFIGS.normal;

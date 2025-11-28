@@ -515,10 +515,14 @@ function StatisticsPanel() {
   const sdUtilization = (sdOccupied / sdGates.length) * 100;
   const laUtilization = (laOccupied / laGates.length) * 100;
   
-  const nsUtilization = pipelines.find((p) => p.id === "N-S");
-  const ewUtilization = pipelines.find((p) => p.id === "E-W");
-  const nsPercent = nsUtilization ? (nsUtilization.currentCount / nsUtilization.capacity) * 100 : 0;
-  const ewPercent = ewUtilization ? (ewUtilization.currentCount / ewUtilization.capacity) * 100 : 0;
+  const nsPipelines = pipelines.filter((p) => p.id.startsWith("N-S"));
+  const ewPipelines = pipelines.filter((p) => p.id.startsWith("E-W"));
+  const nsTotalCount = nsPipelines.reduce((sum, p) => sum + p.currentCount, 0);
+  const nsTotalCapacity = nsPipelines.reduce((sum, p) => sum + p.capacity, 0);
+  const ewTotalCount = ewPipelines.reduce((sum, p) => sum + p.currentCount, 0);
+  const ewTotalCapacity = ewPipelines.reduce((sum, p) => sum + p.capacity, 0);
+  const nsPercent = nsTotalCapacity ? (nsTotalCount / nsTotalCapacity) * 100 : 0;
+  const ewPercent = ewTotalCapacity ? (ewTotalCount / ewTotalCapacity) * 100 : 0;
   
   const totalLandings = currentStats.landingsSD + currentStats.landingsLA;
   const totalDepartures = currentStats.departuresSD + currentStats.departuresLA;

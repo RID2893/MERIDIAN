@@ -59,10 +59,10 @@ export const SCENARIO_CONFIGS: Record<ScenarioName, ScenarioConfig> = {
     pipelineTransferProbability: 0.003,
     departureProbability: 0.02,
     pipelineCapacity: 20,
-    disabledGates: ["San Diego-NQ-1", "San Diego-NQ-2", "San Diego-NQ-3", "San Diego-NQ-4",
-                    "San Diego-EQ-1", "San Diego-EQ-2", "San Diego-EQ-3", "San Diego-EQ-4",
-                    "Los Angeles-SQ-1", "Los Angeles-SQ-2", "Los Angeles-SQ-3", "Los Angeles-SQ-4",
-                    "Los Angeles-WQ-1", "Los Angeles-WQ-2", "Los Angeles-WQ-3", "Los Angeles-WQ-4"],
+    disabledGates: ["San Diego-NQ-01", "San Diego-NQ-02", "San Diego-NQ-03", "San Diego-NQ-04",
+                    "San Diego-EQ-01", "San Diego-EQ-02", "San Diego-EQ-03", "San Diego-EQ-04",
+                    "Los Angeles-SQ-01", "Los Angeles-SQ-02", "Los Angeles-SQ-03", "Los Angeles-SQ-04",
+                    "Los Angeles-WQ-01", "Los Angeles-WQ-02", "Los Angeles-WQ-03", "Los Angeles-WQ-04"],
     alertMessage: "MAINTENANCE: 16 gates offline for scheduled maintenance",
   },
   emergency: {
@@ -193,7 +193,7 @@ function createGates(cityId: CityName, disabledGates: string[] = []): Gate[] {
       const angleWithinQuadrant = (i / GATES_PER_QUADRANT) * 90;
       const angle = quadrantOffsets[quadrant] + angleWithinQuadrant;
       const distance = RING_RADIUS;
-      const gateId = `${cityId}-${quadrant[0]}Q-${i + 1}`;
+      const gateId = `${cityId}-${quadrant[0]}Q-${String(i + 1).padStart(2, "0")}`;
       const isDisabled = disabledGates.includes(gateId);
       
       gates.push({

@@ -1,6 +1,7 @@
 import { useRef, useMemo, useState } from "react";
 import * as THREE from "three";
 import { useFrame, ThreeEvent } from "@react-three/fiber";
+import { Text } from "@react-three/drei";
 import { useSimulation, type CityName, type Gate } from "@/lib/stores/useSimulation";
 import { useShallow } from "zustand/react/shallow";
 
@@ -42,29 +43,44 @@ function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number,
   
   const scale = hovered || isSelected ? 1.5 : 1;
   
+  const gateNumber = gate.id.split("-").pop() || "";
+  
   return (
-    <mesh
-      ref={meshRef}
-      position={gatePosition}
-      onClick={handleClick}
-      onPointerOver={(e) => {
-        e.stopPropagation();
-        setHovered(true);
-        document.body.style.cursor = "pointer";
-      }}
-      onPointerOut={() => {
-        setHovered(false);
-        document.body.style.cursor = "auto";
-      }}
-      scale={scale}
-    >
-      <sphereGeometry args={[0.15, 16, 16]} />
-      <meshStandardMaterial
-        color={isSelected ? 0xffffff : color}
-        emissive={isSelected ? 0xffffff : color}
-        emissiveIntensity={isSelected ? 1 : hovered ? 0.8 : 0.4}
-      />
-    </mesh>
+    <group position={gatePosition}>
+      <mesh
+        ref={meshRef}
+        onClick={handleClick}
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          setHovered(true);
+          document.body.style.cursor = "pointer";
+        }}
+        onPointerOut={() => {
+          setHovered(false);
+          document.body.style.cursor = "auto";
+        }}
+        scale={scale}
+      >
+        <sphereGeometry args={[0.15, 16, 16]} />
+        <meshStandardMaterial
+          color={isSelected ? 0xffffff : color}
+          emissive={isSelected ? 0xffffff : color}
+          emissiveIntensity={isSelected ? 1 : hovered ? 0.8 : 0.4}
+        />
+      </mesh>
+      
+      <Text
+        position={[0, 0.3, 0]}
+        fontSize={0.25}
+        color={color}
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.02}
+        outlineColor={0x000000}
+      >
+        {gate.id.split("-").slice(1).join("-")}
+      </Text>
+    </group>
   );
 }
 
@@ -114,6 +130,19 @@ export function CityRing({ cityId, position }: CityRingProps) {
         <GateSphere key={gate.id} gate={gate} cityPosition={position} />
       ))}
       
+      {/* Cardinal Markers */}
+      <Text position={[0, 0.1, -6.8]} fontSize={0.6} color={0x00ffff} anchorX="center" anchorY="middle">
+        N
+      </Text>
+      <Text position={[6.8, 0.1, 0]} fontSize={0.6} color={0x00ffff} anchorX="center" anchorY="middle">
+        E
+      </Text>
+      <Text position={[0, 0.1, 6.8]} fontSize={0.6} color={0x00ffff} anchorX="center" anchorY="middle">
+        S
+      </Text>
+      <Text position={[-6.8, 0.1, 0]} fontSize={0.6} color={0x00ffff} anchorX="center" anchorY="middle">
+        W
+      </Text>
     </group>
   );
 }

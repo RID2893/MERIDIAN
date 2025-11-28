@@ -179,8 +179,6 @@ export interface SimulationState {
 }
 
 const RING_RADIUS = 6;
-const GATE_MIN_DISTANCE = 4;
-const GATE_MAX_DISTANCE = 7;
 const GATES_PER_QUADRANT = 28;
 const MAX_ALTITUDE = 1250;
 const GROUND_ALTITUDE = 50;

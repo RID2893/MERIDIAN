@@ -4,6 +4,8 @@ import { useFrame, ThreeEvent } from "@react-three/fiber";
 import { useSimulation, type CityName, type Gate } from "@/lib/stores/useSimulation";
 import { useShallow } from "zustand/react/shallow";
 
+const RING_RADIUS = 6;
+
 interface CityRingProps {
   cityId: CityName;
   position: [number, number, number];
@@ -27,11 +29,11 @@ function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number,
   
   const gatePosition = useMemo(() => {
     const angleRad = (gate.angle * Math.PI) / 180;
-    const x = cityPosition[0] + Math.cos(angleRad) * gate.distance;
-    const z = cityPosition[2] + Math.sin(angleRad) * gate.distance;
+    const x = cityPosition[0] + Math.cos(angleRad) * RING_RADIUS;
+    const z = cityPosition[2] + Math.sin(angleRad) * RING_RADIUS;
     const y = cityPosition[1];
     return [x, y, z] as [number, number, number];
-  }, [gate.angle, gate.distance, cityPosition]);
+  }, [gate.angle, cityPosition]);
   
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();

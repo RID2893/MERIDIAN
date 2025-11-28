@@ -7,20 +7,45 @@ import { useSimulation, type Aircraft as AircraftType } from "@/lib/stores/useSi
 const SD_POSITION: [number, number, number] = [-12, 0, 0];
 const LA_POSITION: [number, number, number] = [12, 0, 8];
 
-const PIPELINE_PATHS = {
+const ROUTE_BASE_PATHS = {
   "N-S": {
-    start: new THREE.Vector3(SD_POSITION[0], 2, SD_POSITION[2] - 6),
-    end: new THREE.Vector3(LA_POSITION[0], 2, LA_POSITION[2] - 6),
-    control1: new THREE.Vector3(-4, 4, -3),
-    control2: new THREE.Vector3(4, 4, 5),
+    baseStart: new THREE.Vector3(SD_POSITION[0], 0, SD_POSITION[2] - 6),
+    baseEnd: new THREE.Vector3(LA_POSITION[0], 0, LA_POSITION[2] - 6),
+    control1: new THREE.Vector3(-4, 0, -3),
+    control2: new THREE.Vector3(4, 0, 5),
   },
   "E-W": {
-    start: new THREE.Vector3(SD_POSITION[0] + 6, 1.5, SD_POSITION[2]),
-    end: new THREE.Vector3(LA_POSITION[0] - 6, 1.5, LA_POSITION[2]),
-    control1: new THREE.Vector3(-2, 3, 2),
-    control2: new THREE.Vector3(8, 3, 6),
+    baseStart: new THREE.Vector3(SD_POSITION[0] + 6, 0, SD_POSITION[2]),
+    baseEnd: new THREE.Vector3(LA_POSITION[0] - 6, 0, LA_POSITION[2]),
+    control1: new THREE.Vector3(-2, 0, 2),
+    control2: new THREE.Vector3(8, 0, 6),
   },
 };
+
+const VARIANT_OFFSETS = {
+  CENTER: { offset: 0, altitude: 1.5 },
+  TOP: { offset: 0.5, altitude: 2.0 },
+  BOTTOM: { offset: -0.5, altitude: 1.0 },
+};
+
+function getPipelinePath(pipelineId: string) {
+  const parts = pipelineId.split("-");
+  const variant = parts[parts.length - 1] as keyof typeof VARIANT_OFFSETS;
+  const routeId = parts.slice(0, -1).join("-") as keyof typeof ROUTE_BASE_PATHS;
+  
+  const baseRoute = ROUTE_BASE_PATHS[routeId];
+  if (!baseRoute) return null;
+  
+  const variantInfo = VARIANT_OFFSETS[variant] || VARIANT_OFFSETS.CENTER;
+  const offsetAmount = variantInfo.offset;
+  
+  const start = baseRoute.baseStart.clone().add(new THREE.Vector3(0, variantInfo.altitude, offsetAmount));
+  const end = baseRoute.baseEnd.clone().add(new THREE.Vector3(0, variantInfo.altitude, offsetAmount));
+  const control1 = baseRoute.control1.clone().add(new THREE.Vector3(0, variantInfo.altitude, offsetAmount * 0.5));
+  const control2 = baseRoute.control2.clone().add(new THREE.Vector3(0, variantInfo.altitude, offsetAmount * 0.5));
+  
+  return { start, end, control1, control2 };
+}
 
 const TRAIL_LENGTH = 15;
 const MAX_TRAIL_POSITIONS = 20;
@@ -52,14 +77,16 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
     }
     
     if (aircraft.status === "in_pipeline" && aircraft.pipelineId) {
-      const path = PIPELINE_PATHS[aircraft.pipelineId];
-      const curve = new THREE.CubicBezierCurve3(
-        path.start,
-        path.control1,
-        path.control2,
-        path.end
-      );
-      return curve.getPointAt(aircraft.pipelineProgress);
+      const path = getPipelinePath(aircraft.pipelineId);
+      if (path) {
+        const curve = new THREE.CubicBezierCurve3(
+          path.start,
+          path.control1,
+          path.control2,
+          path.end
+        );
+        return curve.getPointAt(aircraft.pipelineProgress);
+      }
     }
     
     return new THREE.Vector3(0, 0, 0);
@@ -76,15 +103,17 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
       return new THREE.Euler(Math.PI / 4, (aircraft.angleOnRing * Math.PI) / 180, 0);
     }
     if (aircraft.status === "in_pipeline" && aircraft.pipelineId) {
-      const path = PIPELINE_PATHS[aircraft.pipelineId];
-      const curve = new THREE.CubicBezierCurve3(
-        path.start,
-        path.control1,
-        path.control2,
-        path.end
-      );
-      const tangent = curve.getTangentAt(aircraft.pipelineProgress);
-      return new THREE.Euler(0, Math.atan2(tangent.x, tangent.z), 0);
+      const path = getPipelinePath(aircraft.pipelineId);
+      if (path) {
+        const curve = new THREE.CubicBezierCurve3(
+          path.start,
+          path.control1,
+          path.control2,
+          path.end
+        );
+        const tangent = curve.getTangentAt(aircraft.pipelineProgress);
+        return new THREE.Euler(0, Math.atan2(tangent.x, tangent.z), 0);
+      }
     }
     return new THREE.Euler(0, 0, 0);
   }, [aircraft]);

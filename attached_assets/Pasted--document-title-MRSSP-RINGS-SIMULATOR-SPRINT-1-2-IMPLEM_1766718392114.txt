@@ -1,0 +1,79 @@
+{
+  "document": {
+    "title": "MRSSP RINGS SIMULATOR — SPRINT 1 & 2 IMPLEMENTATION GUIDE",
+    "subtitle": "Ready-to-Copy Code Prompts for Replit/Claude in JSON Format",
+    "organization": "Alpha Edge Consulting",
+    "date": "December 25, 2025",
+    "version": "1.0",
+    "usage": {
+      "instructions": [
+        "Copy each prompt object from the 'prompts' array",
+        "Paste the 'content' field into Replit AI chat or Claude",
+        "Follow with: 'Build this module as production-ready JavaScript code with full error handling and documentation'",
+        "Integration: Connect modules at the end via the provided EventBus"
+      ]
+    },
+    "sprints": {
+      "sprint_1": {
+        "name": "DEMAND GENERATION",
+        "duration": "Week 3-4",
+        "description": "Real traffic patterns (peak hours, OD matrices), Time-of-day multipliers (3x at 9 AM, 0.1x at 2 AM), Passenger distribution"
+      },
+      "sprint_2": {
+        "name": "SAFETY & COLLISION AVOIDANCE",
+        "duration": "Week 5-6",
+        "description": "Separation enforcement (100m horizontal, 100ft vertical), Conflict resolution (altitude changes, heading adjustment), Incident tracking (near-miss logging)"
+      }
+    },
+    "prompts": [
+      {
+        "id": "PROMPT_1.1",
+        "sprint": "Sprint 1",
+        "name": "DemandGenerator Class Foundation",
+        "category": "Demand Generation",
+        "priority": "HIGH",
+        "lines_of_code": "300-400",
+        "content": "Build a DemandGenerator class for the MRSSP RINGS simulator with the following specifications:\n\n**Class Name:** DemandGenerator\n\n**Constructor:**\n- accepts baselineFlightsPerHour (default: 60)\n- accepts citiesConfig (array of city objects with name, position, gateCount)\n\n**Key Methods:**\n\n1. generateODMatrix(timeOfDay, dayOfWeek)\n   - Returns origin-destination demand matrix\n   - Inputs: timeOfDay (0-23 hours), dayOfWeek (0-6, Monday=0)\n   - Time-of-day multipliers:\n     * 6-9 AM: 3.2x baseline (morning commute)\n     * 9 AM-12 PM: 1.8x baseline (mid-morning)\n     * 12-1 PM: 1.5x baseline (lunch)\n     * 1-4 PM: 1.2x baseline (afternoon)\n     * 4-7 PM: 4.1x baseline (evening rush - PEAK)\n     * 7-10 PM: 2.5x baseline (evening)\n     * 10 PM-6 AM: 0.08x baseline (night trough)\n   - Day-of-week multipliers: Monday-Friday 1.0x, Saturday 0.7x, Sunday 0.5x\n   - Output format:\n     {\n       \"SanDiego-OrangeCounty\": 120,\n       \"OrangeCounty-SanDiego\": 95,\n       \"SanDiego-SanDiego\": 35,\n       \"OrangeCounty-OrangeCounty\": 28\n     }\n\n2. generateAircraft(demandCount, originCity, destinationCity)\n   - Creates aircraft objects for a single origin-destination pair\n   - Each aircraft should have:\n     * id (unique string: \"AC_\" + timestamp + random)\n     * origin, destination (city names)\n     * batteryCapacity (random 250-400 kWh)\n     * passengerCount (random 2-6 passengers)\n     * cruiseSpeed (random 160-190 kph)\n     * maxFlightTime (random 45-90 minutes based on battery/speed)\n     * reserveFuelPercent (20% minimum)\n     * currentBattery (100% at spawn)\n     * status (\"pending\", \"orbiting\", \"approach\", \"landed\", \"charging\")\n     * createdAt (timestamp)\n   - Return: array of aircraft objects\n\n3. getPassengerDistribution()\n   - Returns probability distribution for passenger counts\n   - Output: { 2: 0.15, 3: 0.25, 4: 0.35, 5: 0.20, 6: 0.05 }\n   - Use this when generating aircraft\n\n4. calculateTotalDemand(currentHour, currentDay)\n   - Returns: { totalFlights: number, byOriginDestination: object }\n   - Uses generateODMatrix internally\n\n**Implementation Notes:**\n- Use Math.random() for stochastic variation (±10% per flight)\n- Store time-of-day multipliers as a class property (array or object)\n- Make methods chainable where possible\n- Add basic validation (timeOfDay 0-23, dayOfWeek 0-6)\n\n**Example Usage:**\nconst demandGen = new DemandGenerator(60, [\n  { name: \"SanDiego\", position: {x: 0, y: 0, z: 0}, gateCount: 112 },\n  { name: \"OrangeCounty\", position: {x: 50, y: 0, z: 0}, gateCount: 112 }\n]);\n\nconst odMatrix = demandGen.generateODMatrix(9, 1); // 9 AM Monday\nconst aircraft = demandGen.generateAircraft(120, \"SanDiego\", \"OrangeCounty\");",
+        "dependencies": [],
+        "integrates_with": ["EventBus"],
+        "test_scenarios": [
+          "9 AM Monday (peak): 4.33x multiplier × 60 baseline = ~260 flights",
+          "2 AM Monday (trough): 0.03x multiplier × 60 baseline = ~2 flights",
+          "Saturday 5 PM: 4.0x multiplier × 0.7 day multiplier × 60 = ~168 flights"
+        ]
+      },
+      {
+        "id": "PROMPT_1.2",
+        "sprint": "Sprint 1",
+        "name": "Time-of-Day Traffic Profile Configuration",
+        "category": "Demand Generation",
+        "priority": "HIGH",
+        "lines_of_code": "250+",
+        "content": "Create a TrafficProfileConfig object/class for the MRSSP RINGS simulator that defines realistic time-of-day and day-of-week traffic patterns for urban air mobility (eVTOL services).\n\n**Configuration Object Structure:**\n\ntrafficProfileConfig = {\n  \n  // Time-of-day multipliers (0-23 hours)\n  hourlyMultipliers: [\n    { hour: 0, multiplier: 0.05, label: \"Midnight\" },\n    { hour: 1, multiplier: 0.04, label: \"1 AM\" },\n    { hour: 2, multiplier: 0.03, label: \"2 AM\" },\n    { hour: 3, multiplier: 0.02, label: \"3 AM\" },\n    { hour: 4, multiplier: 0.01, label: \"4 AM\" },\n    { hour: 5, multiplier: 0.02, label: \"5 AM\" },\n    { hour: 6, multiplier: 0.15, label: \"6 AM - Early morning\" },\n    { hour: 7, multiplier: 0.50, label: \"7 AM - Morning starts\" },\n    { hour: 8, multiplier: 2.80, label: \"8 AM - Peak morning\" },\n    { hour: 9, multiplier: 3.20, label: \"9 AM - PEAK morning\" },\n    { hour: 10, multiplier: 2.00, label: \"10 AM\" },\n    { hour: 11, multiplier: 1.80, label: \"11 AM\" },\n    { hour: 12, multiplier: 1.50, label: \"12 PM - Lunch\" },\n    { hour: 13, multiplier: 1.40, label: \"1 PM\" },\n    { hour: 14, multiplier: 1.20, label: \"2 PM\" },\n    { hour: 15, multiplier: 1.50, label: \"3 PM\" },\n    { hour: 16, multiplier: 2.50, label: \"4 PM - Afternoon ramp\" },\n    { hour: 17, multiplier: 4.10, label: \"5 PM - PEAK evening\" },\n    { hour: 18, multiplier: 4.00, label: \"6 PM - PEAK evening\" },\n    { hour: 19, multiplier: 3.20, label: \"7 PM - Evening\" },\n    { hour: 20, multiplier: 2.50, label: \"8 PM - Evening decline\" },\n    { hour: 21, multiplier: 1.80, label: \"9 PM\" },\n    { hour: 22, multiplier: 0.80, label: \"10 PM\" },\n    { hour: 23, multiplier: 0.20, label: \"11 PM\" }\n  ],\n\n  // Day-of-week multipliers (0 = Monday, 6 = Sunday)\n  dayMultipliers: {\n    0: 1.00,\n    1: 1.05,\n    2: 1.08,\n    3: 1.05,\n    4: 1.00,\n    5: 0.70,\n    6: 0.50\n  },\n\n  // Passenger count distribution (probability)\n  passengerDistribution: {\n    2: 0.15,\n    3: 0.25,\n    4: 0.35,\n    5: 0.20,\n    6: 0.05\n  },\n\n  // eVTOL aircraft specifications (realistic ranges)\n  aircraftSpecs: {\n    batteryCapacity: { min: 250, max: 400 },\n    cruiseSpeed: { min: 160, max: 190 },\n    maxFlightTime: { min: 45, max: 90 },\n    reserveFuelPercent: 20,\n    maxPassengers: 6,\n    minPassengers: 2\n  },\n\n  // Origin-Destination base demand (baseline flights per hour)\n  baselineODFlows: [\n    { origin: \"SanDiego\", destination: \"OrangeCounty\", baseFlights: 75 },\n    { origin: \"OrangeCounty\", destination: \"SanDiego\", baseFlights: 65 },\n    { origin: \"SanDiego\", destination: \"SanDiego\", baseFlights: 35 },\n    { origin: \"OrangeCounty\", destination: \"OrangeCounty\", baseFlights: 28 }\n  ],\n\n  // Peak hour definitions (for scenario testing)\n  peakHours: {\n    morning: { start: 7, end: 10 },\n    midday: { start: 12, end: 14 },\n    evening: { start: 16, end: 19 },\n    night: { start: 22, end: 6 }\n  }\n}\n\n**Helper Function: getMultiplierForTime(hour, dayOfWeek)**\nReturns: hourlyMultiplier × dayMultiplier\nExample: getMultiplierForTime(17, 2) = 4.1 × 1.08 = 4.43x\n\n**Implementation Requirements:**\n- Make configuration immutable (Object.freeze or similar)\n- Provide getter methods for each section\n- Add validation method to ensure all multipliers sum logically\n- Export as singleton for use across simulator",
+        "dependencies": [],
+        "integrates_with": ["DemandGenerator", "ODMatrixCalculator"],
+        "test_scenarios": [
+          "Peak morning (9 AM): 3.2x multiplier",
+          "Peak evening (5 PM): 4.1x multiplier",
+          "Night trough (2 AM): 0.03x multiplier",
+          "Weekend Saturday: 0.7x day multiplier"
+        ]
+      },
+      {
+        "id": "PROMPT_1.3",
+        "sprint": "Sprint 1",
+        "name": "OD (Origin-Destination) Matrix Calculator",
+        "category": "Demand Generation",
+        "priority": "HIGH",
+        "lines_of_code": "300-400",
+        "content": "Create an ODMatrixCalculator class that generates dynamic origin-destination matrices based on time-of-day and demand patterns for the MRSSP RINGS simulator.\n\n**Class Name:** ODMatrixCalculator\n\n**Constructor:**\n- accepts trafficProfileConfig (from previous prompt)\n- accepts baselineODFlows (array of flow objects)\n\n**Key Methods:**\n\n1. calculateODMatrix(currentHour, dayOfWeek, baselineDemand)\n   - currentHour: 0-23\n   - dayOfWeek: 0-6 (Monday=0)\n   - baselineDemand: flights per hour baseline (e.g., 60)\n   - Returns: object with demand for each route\n   - Example output:\n     {\n       \"SanDiego→OrangeCounty\": 245,\n       \"OrangeCounty→SanDiego\": 210,\n       \"SanDiego→SanDiego\": 145,\n       \"OrangeCounty→OrangeCounty\": 116\n     }\n\n2. addRandomVariation(demandValue, variationPercent = 10)\n   - Adds ±variationPercent stochastic noise to demand\n   - Returns: adjusted demand number\n   - Purpose: Simulate real-world demand uncertainty\n\n3. getRouteShare(originCity, destinationCity)\n   - Returns: percentage of total demand for this route\n   - Example: \"SanDiego→OrangeCounty\" at peak = 40% of total\n\n4. projectDemand(hourRange)\n   - hourRange: { start: 6, end: 10 }\n   - Returns: cumulative demand for hour range\n   - Use case: Scenario planning (e.g., \"total demand 6-10 AM?\")\n\n5. detectPeakHour(currentHour, dayOfWeek)\n   - Returns: { isPeak: boolean, peakType: \"morning\"|\"evening\"|\"none\", intensity: 0-1 }\n   - intensity: 0-1 scale (1.0 = maximum peak)\n\n**Integration Notes:**\n- Use TrafficProfileConfig.hourlyMultipliers for time-of-day\n- Use TrafficProfileConfig.dayMultipliers for day-of-week\n- Use TrafficProfileConfig.baselineODFlows for route distribution\n- Maintain demand history (array) for trending\n\n**Testing Scenarios:**\n- 9 AM Monday (peak): 4.33x multiplier × 60 baseline = ~260 flights\n- 2 AM Monday (trough): 0.03x multiplier × 60 baseline = ~2 flights\n- Saturday 5 PM: 4.0x multiplier × 0.7 day multiplier × 60 = ~168 flights",
+        "dependencies": ["PROMPT_1.2"],
+        "integrates_with": ["DemandGenerator", "EventBus"],
+        "test_scenarios": [
+          "Peak hour demand calculation",
+          "Trough hour demand calculation",
+          "Weekend vs weekday variation",
+          "Random variation within ±10%"
+        ]
+      },
+      {

@@ -1,5 +1,8 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
+import { DemandGenerator } from "../../modules/DemandGenerator";
+import { SafetySystem } from "../../modules/SafetySystem";
+import { EventBus } from "../../modules/EventBus";
 
 export type AircraftStatus = "in_ring" | "descending" | "landed" | "in_pipeline" | "ascending";
 export type GateStatus = "GREEN" | "YELLOW" | "RED";
@@ -348,6 +351,14 @@ function createPipelines(config: ScenarioConfig = SCENARIO_CONFIGS.normal): Pipe
 
 const defaultConfig = SCENARIO_CONFIGS.normal;
 
+const citiesConfig = [
+  { name: "San Diego", position: { x: -12, y: 0, z: 0 }, gateCount: 112 },
+  { name: "Los Angeles", position: { x: 12, y: 0, z: 8 }, gateCount: 112 }
+];
+
+const demandGenerator = new DemandGenerator(60, citiesConfig);
+const safetySystem = new SafetySystem();
+
 export const useSimulation = create<SimulationState>()(
   subscribeWithSelector((set, get) => ({
     isPlaying: false,
@@ -492,6 +503,61 @@ export const useSimulation = create<SimulationState>()(
       const state = get();
       if (!state.isPlaying) return;
       
+      const hour = state.simulationTime.getHours();
+      const day = state.simulationTime.getDay();
+      
+      // Update Demand
+      if (state.aircraft.length < 200) { // Safety limit
+        const odMatrix = demandGenerator.generateODMatrix(hour, day);
+        // Simplified spawn logic: 1% chance per tick to spawn based on demand
+        if (Math.random() < 0.05 * deltaTime) {
+          Object.entries(odMatrix).forEach(([pair, count]) => {
+            if (count > 0 && Math.random() < 0.1) {
+              const [origin, dest] = pair.split("-") as [CityName, CityName];
+              if (origin !== dest) {
+                // Spawn inter-city aircraft
+                const id = `AC-${Date.now().toString().slice(-3)}${Math.floor(Math.random() * 100)}`;
+                state.addAircraft({
+                  id,
+                  status: "in_ring",
+                  cityId: origin,
+                  pipelineId: null,
+                  angleOnRing: Math.random() * 360,
+                  distanceFromCenter: RING_RADIUS,
+                  altitude: MAX_ALTITUDE,
+                  targetGate: null,
+                  pipelineProgress: 0,
+                  color: 0x0099ff,
+                  speed: 0.5 + Math.random() * 0.3,
+                  descentStartTime: null,
+                  originCity: origin,
+                });
+              }
+            }
+          });
+        }
+      }
+
+      // Safety System Check
+      const safetyAircraft = state.aircraft.map(a => ({
+        id: a.id,
+        latitude: a.distanceFromCenter, // Mocking lat/lon with ring coordinates for now
+        longitude: a.angleOnRing,
+        altitude: a.altitude,
+        speed: a.speed,
+        heading: 0,
+        timestamp: Date.now()
+      }));
+      
+      const conflicts = safetySystem.detectAllConflicts(safetyAircraft);
+      if (conflicts.length > 0) {
+        conflicts.forEach(c => {
+          if (c.severity === "CRITICAL") {
+            state.addEvent(`CRITICAL CONFLICT: ${c.aircraftA} & ${c.aircraftB}`, "error");
+          }
+        });
+      }
+
       const scenarioConfig = SCENARIO_CONFIGS[state.selectedScenario as ScenarioName] || defaultConfig;
       const adjustedDelta = deltaTime * state.speed;
       const newEvents: { message: string; type: "info" | "warning" | "success" | "error" }[] = [];

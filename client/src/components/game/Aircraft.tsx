@@ -1,7 +1,7 @@
-import { useRef, useMemo, useEffect } from "react";
+import { useRef, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { Trail } from "@react-three/drei";
+import { Html } from "@react-three/drei";
 import { useSimulation, type Aircraft as AircraftType } from "@/lib/stores/useSimulation";
 
 const SD_POSITION: [number, number, number] = [-12, 0, 0];
@@ -27,6 +27,41 @@ const VARIANT_OFFSETS = {
   TOP: { offset: 0.5, altitude: 2.0 },
   BOTTOM: { offset: -0.5, altitude: 1.0 },
 };
+
+// ============================================================================
+// OPERATION VOLUME - RFI-Aligned Flight Data Display
+// Meridian Ring Structure: Ring 1 (150ft), Ring 2 (500ft), Ring 3 (1000ft)
+// Corridors: N-S (500/600ft), E-W (550/650ft)
+// ============================================================================
+
+const OPERATORS = ['AR', 'JB', 'WK', 'BT', 'LL', 'VL'];
+
+function getOperatorCallsign(id: string): string {
+  const num = parseInt(id.replace(/\D/g, '')) || 0;
+  return `${OPERATORS[num % OPERATORS.length]}-${String(num).padStart(3, '0')}`;
+}
+
+function getDisplayAltFt(aircraft: AircraftType): number {
+  if (aircraft.status === 'landed') return 0;
+  if (aircraft.status === 'in_ring') return 500;
+  if (aircraft.status === 'in_pipeline') {
+    const isNS = aircraft.pipelineId?.includes('N-S');
+    if (aircraft.pipelineId?.includes('TOP')) return isNS ? 600 : 650;
+    if (aircraft.pipelineId?.includes('BOTTOM')) return isNS ? 500 : 550;
+    return isNS ? 550 : 600;
+  }
+  return Math.round(Math.max(0, (aircraft.altitude - 50) / 1200) * 500);
+}
+
+function getOpVolume(aircraft: AircraftType): string {
+  if (aircraft.status === 'in_ring') return 'RING-2';
+  if (aircraft.status === 'in_pipeline') {
+    return aircraft.pipelineId?.split('-').slice(0, 2).join('-') || 'COR';
+  }
+  if (aircraft.status === 'descending') return 'DESC';
+  if (aircraft.status === 'ascending') return 'ASC';
+  return 'GND';
+}
 
 function getPipelinePath(pipelineId: string) {
   const parts = pipelineId.split("-");
@@ -150,7 +185,22 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
     if (aircraft.status === "in_pipeline") return 0xff8800;
     return aircraft.color;
   }, [aircraft.status, aircraft.color]);
-  
+
+  // Flight Data Block - Operation Volume ticker
+  const callsign = useMemo(() => getOperatorCallsign(aircraft.id), [aircraft.id]);
+  const altFt = getDisplayAltFt(aircraft);
+  const speedKph = Math.round(aircraft.speed * 240);
+  const opVolume = getOpVolume(aircraft);
+  const tickerBorder = useMemo(() => {
+    switch (aircraft.status) {
+      case 'in_ring': return '#00aaff';
+      case 'in_pipeline': return '#ffaa00';
+      case 'descending': return '#00ff88';
+      case 'ascending': return '#ffff00';
+      default: return '#666';
+    }
+  }, [aircraft.status]);
+
   return (
     <>
       <group ref={groupRef}>
@@ -162,12 +212,41 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
             emissiveIntensity={0.3}
           />
         </mesh>
-        
+
         <pointLight
           color={aircraft.color}
           intensity={0.3}
           distance={1}
         />
+
+        {/* Flight Data Block - ATC-style ticker */}
+        {aircraft.status !== 'landed' && (
+          <Html
+            position={[0, 0.5, 0]}
+            center
+            distanceFactor={20}
+            style={{ pointerEvents: 'none' }}
+          >
+            <div style={{
+              background: 'rgba(0, 12, 24, 0.9)',
+              border: `1px solid ${tickerBorder}`,
+              borderRadius: '2px',
+              padding: '1px 4px',
+              fontFamily: "'Courier New', monospace",
+              fontSize: '8px',
+              lineHeight: '1.3',
+              whiteSpace: 'nowrap',
+              userSelect: 'none',
+            }}>
+              <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '9px' }}>
+                {callsign}
+              </div>
+              <div style={{ color: '#00ffcc' }}>
+                {opVolume} {altFt}ft {speedKph}kph
+              </div>
+            </div>
+          </Html>
+        )}
       </group>
       
       <line>

@@ -65,7 +65,7 @@ function RainSystem({
     for (let i = 0; i < MAX_RAIN; i++) {
       const i3 = i * 3;
       pos[i3] = (Math.random() - 0.5) * 60;
-      pos[i3 + 1] = Math.random() * 25;
+      pos[i3 + 1] = Math.random() * 8;
       pos[i3 + 2] = (Math.random() - 0.5) * 40;
       vel[i3] = 0;
       vel[i3 + 1] = -8 - Math.random() * 4;
@@ -97,7 +97,7 @@ function RainSystem({
 
       if (posArray[i3 + 1] < -1) {
         posArray[i3] = (Math.random() - 0.5) * 60;
-        posArray[i3 + 1] = 20 + Math.random() * 5;
+        posArray[i3 + 1] = 6 + Math.random() * 2;
         posArray[i3 + 2] = (Math.random() - 0.5) * 40;
       }
     }
@@ -149,7 +149,7 @@ function SnowSystem({
     for (let i = 0; i < MAX_SNOW; i++) {
       const i3 = i * 3;
       pos[i3] = (Math.random() - 0.5) * 60;
-      pos[i3 + 1] = Math.random() * 25;
+      pos[i3 + 1] = Math.random() * 8;
       pos[i3 + 2] = (Math.random() - 0.5) * 40;
     }
     return pos;
@@ -176,7 +176,7 @@ function SnowSystem({
 
       if (posArray[i3 + 1] < -1) {
         posArray[i3] = (Math.random() - 0.5) * 60;
-        posArray[i3 + 1] = 20 + Math.random() * 5;
+        posArray[i3 + 1] = 6 + Math.random() * 2;
         posArray[i3 + 2] = (Math.random() - 0.5) * 40;
       }
     }
@@ -327,7 +327,7 @@ function LightningFlash({ active }: { active: boolean }) {
       flashDuration.current = 0.05 + Math.random() * 0.1;
       lightRef.current.position.set(
         (Math.random() - 0.5) * 40,
-        15 + Math.random() * 10,
+        5 + Math.random() * 4,
         (Math.random() - 0.5) * 30
       );
     }
@@ -393,13 +393,13 @@ export function WeatherEffects({
       )}
 
       {/* Wind indicators at key locations */}
-      <WindIndicator speed={windSpeed} direction={windDirection} position={[-12, 5, 0]} />
-      <WindIndicator speed={windSpeed} direction={windDirection} position={[12, 5, 8]} />
-      <WindIndicator speed={windSpeed} direction={windDirection} position={[0, 5, 4]} />
+      <WindIndicator speed={windSpeed} direction={windDirection} position={[-12, 3, 0]} />
+      <WindIndicator speed={windSpeed} direction={windDirection} position={[12, 3, 8]} />
+      <WindIndicator speed={windSpeed} direction={windDirection} position={[0, 3, 4]} />
 
       {/* Cloud layer */}
       {cloudCover > 10 && (
-        <CloudLayer coverage={cloudCover} height={18} />
+        <CloudLayer coverage={cloudCover} height={6} />
       )}
 
       {/* Lightning */}

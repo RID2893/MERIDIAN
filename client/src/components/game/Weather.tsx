@@ -42,6 +42,9 @@ export interface WeatherVisualizationProps {
 // RAIN PARTICLE SYSTEM
 // ============================================================================
 
+const MAX_RAIN = 3000;
+const MAX_SNOW = 2000;
+
 function RainSystem({
   intensity,
   windSpeed,
@@ -52,45 +55,46 @@ function RainSystem({
   windDirection: number;
 }) {
   const particlesRef = useRef<THREE.Points>(null);
-  const count = Math.floor(intensity * 3000);
+  const velocitiesRef = useRef<Float32Array>(new Float32Array(MAX_RAIN * 3));
+  const count = Math.floor(intensity * MAX_RAIN);
 
-  const { positions, velocities } = useMemo(() => {
-    const pos = new Float32Array(count * 3);
-    const vel = new Float32Array(count * 3);
+  // Allocate max-size buffer once, never resize
+  const positions = useMemo(() => {
+    const pos = new Float32Array(MAX_RAIN * 3);
+    const vel = velocitiesRef.current;
+    for (let i = 0; i < MAX_RAIN; i++) {
+      const i3 = i * 3;
+      pos[i3] = (Math.random() - 0.5) * 60;
+      pos[i3 + 1] = Math.random() * 25;
+      pos[i3 + 2] = (Math.random() - 0.5) * 40;
+      vel[i3] = 0;
+      vel[i3 + 1] = -8 - Math.random() * 4;
+      vel[i3 + 2] = 0;
+    }
+    return pos;
+  }, []);
 
+  useFrame((_, delta) => {
+    if (!particlesRef.current) return;
+    const geom = particlesRef.current.geometry;
+
+    // Update draw range so only active particles render
+    geom.setDrawRange(0, count);
+
+    if (count === 0) return;
+
+    const posArray = geom.attributes.position.array as Float32Array;
+    const vel = velocitiesRef.current;
     const windRad = (windDirection * Math.PI) / 180;
     const windX = Math.sin(windRad) * windSpeed * 0.1;
     const windZ = Math.cos(windRad) * windSpeed * 0.1;
 
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
-      // Spread rain across the scene
-      pos[i3] = (Math.random() - 0.5) * 60;     // x
-      pos[i3 + 1] = Math.random() * 25;          // y (height)
-      pos[i3 + 2] = (Math.random() - 0.5) * 40;  // z
+      posArray[i3] += (vel[i3] + windX) * delta;
+      posArray[i3 + 1] += vel[i3 + 1] * delta;
+      posArray[i3 + 2] += (vel[i3 + 2] + windZ) * delta;
 
-      // Fall velocity with wind drift
-      vel[i3] = windX;            // x drift
-      vel[i3 + 1] = -8 - Math.random() * 4; // fall speed
-      vel[i3 + 2] = windZ;        // z drift
-    }
-
-    return { positions: pos, velocities: vel };
-  }, [count, windSpeed, windDirection]);
-
-  useFrame((_, delta) => {
-    if (!particlesRef.current || count === 0) return;
-
-    const posArray = particlesRef.current.geometry.attributes.position
-      .array as Float32Array;
-
-    for (let i = 0; i < count; i++) {
-      const i3 = i * 3;
-      posArray[i3] += velocities[i3] * delta;
-      posArray[i3 + 1] += velocities[i3 + 1] * delta;
-      posArray[i3 + 2] += velocities[i3 + 2] * delta;
-
-      // Reset particles that fall below ground
       if (posArray[i3 + 1] < -1) {
         posArray[i3] = (Math.random() - 0.5) * 60;
         posArray[i3 + 1] = 20 + Math.random() * 5;
@@ -98,17 +102,15 @@ function RainSystem({
       }
     }
 
-    particlesRef.current.geometry.attributes.position.needsUpdate = true;
+    geom.attributes.position.needsUpdate = true;
   });
-
-  if (count === 0) return null;
 
   return (
     <points ref={particlesRef}>
-      <bufferGeometry>
+      <bufferGeometry drawRange={{ start: 0, count }}>
         <bufferAttribute
           attach="attributes-position"
-          count={count}
+          count={MAX_RAIN}
           array={positions}
           itemSize={3}
         />
@@ -139,30 +141,35 @@ function SnowSystem({
   windDirection: number;
 }) {
   const particlesRef = useRef<THREE.Points>(null);
-  const count = Math.floor(intensity * 2000);
+  const count = Math.floor(intensity * MAX_SNOW);
 
+  // Allocate max-size buffer once, never resize
   const positions = useMemo(() => {
-    const pos = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
+    const pos = new Float32Array(MAX_SNOW * 3);
+    for (let i = 0; i < MAX_SNOW; i++) {
       const i3 = i * 3;
       pos[i3] = (Math.random() - 0.5) * 60;
       pos[i3 + 1] = Math.random() * 25;
       pos[i3 + 2] = (Math.random() - 0.5) * 40;
     }
     return pos;
-  }, [count]);
+  }, []);
 
   useFrame((state, delta) => {
-    if (!particlesRef.current || count === 0) return;
+    if (!particlesRef.current) return;
+    const geom = particlesRef.current.geometry;
 
-    const posArray = particlesRef.current.geometry.attributes.position
-      .array as Float32Array;
+    // Update draw range so only active particles render
+    geom.setDrawRange(0, count);
+
+    if (count === 0) return;
+
+    const posArray = geom.attributes.position.array as Float32Array;
     const time = state.clock.elapsedTime;
     const windRad = (windDirection * Math.PI) / 180;
 
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
-      // Gentle falling with wind drift and swirl
       posArray[i3] += (Math.sin(time + i) * 0.02 + Math.sin(windRad) * windSpeed * 0.02) * delta * 60;
       posArray[i3 + 1] -= (1 + Math.random() * 0.5) * delta;
       posArray[i3 + 2] += (Math.cos(time + i) * 0.02 + Math.cos(windRad) * windSpeed * 0.02) * delta * 60;
@@ -174,17 +181,15 @@ function SnowSystem({
       }
     }
 
-    particlesRef.current.geometry.attributes.position.needsUpdate = true;
+    geom.attributes.position.needsUpdate = true;
   });
-
-  if (count === 0) return null;
 
   return (
     <points ref={particlesRef}>
-      <bufferGeometry>
+      <bufferGeometry drawRange={{ start: 0, count }}>
         <bufferAttribute
           attach="attributes-position"
-          count={count}
+          count={MAX_SNOW}
           array={positions}
           itemSize={3}
         />

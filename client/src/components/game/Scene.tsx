@@ -7,6 +7,7 @@ import { AircraftRenderer } from "./Aircraft";
 import { Pipelines } from "./Pipeline";
 import { WeatherEffects } from "./Weather";
 import { useSimulation } from "@/lib/stores/useSimulation";
+import { useWeather } from "@/lib/stores/useWeather";
 
 const SD_POSITION: [number, number, number] = [-12, 0, 0];
 const LA_POSITION: [number, number, number] = [12, 0, 8];
@@ -85,6 +86,22 @@ function SimulationLoop() {
   return null;
 }
 
+function WeatherLayer() {
+  const weather = useWeather();
+  return (
+    <WeatherEffects
+      visibility={weather.visibility}
+      windSpeed={weather.windSpeed}
+      windDirection={weather.windDirection}
+      precipitation={weather.precipitation}
+      precipitationType={weather.precipitationType}
+      cloudCover={weather.cloudCover}
+      thunderstorm={weather.thunderstorm}
+      enabled={weather.enabled}
+    />
+  );
+}
+
 export function Scene() {
   return (
     <>
@@ -100,8 +117,8 @@ export function Scene() {
       <Pipelines />
       <AircraftRenderer />
 
-      {/* Weather visualization layer */}
-      <WeatherEffects />
+      {/* Weather visualization layer - connected to Zustand store */}
+      <WeatherLayer />
 
       <SimulationLoop />
       

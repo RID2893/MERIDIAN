@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSimulation, SCENARIO_CONFIGS, ScenarioName } from "@/lib/stores/useSimulation";
+import { useWeather, type WeatherPreset } from "@/lib/stores/useWeather";
 
 function GateInfoModal() {
   const selectedGateId = useSimulation((state) => state.selectedGateId);
@@ -691,6 +692,209 @@ function StatisticsPanel() {
   );
 }
 
+function WeatherPanel() {
+  const weather = useWeather();
+  const [expanded, setExpanded] = useState(false);
+
+  const presets: { key: WeatherPreset; label: string; icon: string; color: string }[] = [
+    { key: "clear", label: "CLEAR", icon: "☀", color: "#00ff00" },
+    { key: "cloudy", label: "CLOUDY", icon: "☁", color: "#aaaaaa" },
+    { key: "rain", label: "RAIN", icon: "🌧", color: "#4488ff" },
+    { key: "storm", label: "STORM", icon: "⛈", color: "#ff4444" },
+    { key: "snow", label: "SNOW", icon: "❄", color: "#ccddff" },
+    { key: "fog", label: "FOG", icon: "🌫", color: "#888888" },
+  ];
+
+  const getSafetyColor = (score: number) => {
+    if (score >= 80) return "#00ff00";
+    if (score >= 50) return "#ffaa00";
+    return "#ff4444";
+  };
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: "120px",
+        right: "10px",
+        background: "rgba(0, 0, 0, 0.9)",
+        border: "1px solid #00ffff",
+        borderRadius: "8px",
+        padding: "12px",
+        width: "220px",
+        zIndex: 1000,
+        pointerEvents: "auto",
+        fontSize: "11px",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+        <h3 style={{ color: "#00ffff", fontSize: "13px", margin: 0, fontFamily: "'Orbitron', monospace" }}>
+          WEATHER
+        </h3>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <button
+            onClick={() => weather.setEnabled(!weather.enabled)}
+            style={{
+              background: weather.enabled ? "rgba(0, 255, 255, 0.2)" : "rgba(255, 0, 0, 0.2)",
+              border: `1px solid ${weather.enabled ? "#00ffff" : "#ff4444"}`,
+              color: weather.enabled ? "#00ffff" : "#ff4444",
+              padding: "2px 8px",
+              cursor: "pointer",
+              fontSize: "10px",
+              borderRadius: "3px",
+              fontFamily: "'Orbitron', monospace",
+            }}
+          >
+            {weather.enabled ? "ON" : "OFF"}
+          </button>
+          <button
+            onClick={() => setExpanded(!expanded)}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#00ffff",
+              cursor: "pointer",
+              fontSize: "12px",
+              padding: 0,
+            }}
+          >
+            {expanded ? "▲" : "▼"}
+          </button>
+        </div>
+      </div>
+
+      {/* Preset selector */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "4px", marginBottom: "10px" }}>
+        {presets.map((p) => (
+          <button
+            key={p.key}
+            onClick={() => weather.setPreset(p.key)}
+            style={{
+              background: weather.activePreset === p.key
+                ? "rgba(0, 255, 255, 0.25)"
+                : "rgba(255, 255, 255, 0.05)",
+              border: weather.activePreset === p.key
+                ? "1px solid #00ffff"
+                : "1px solid #333355",
+              color: weather.activePreset === p.key ? p.color : "#666666",
+              padding: "6px 4px",
+              cursor: "pointer",
+              fontSize: "9px",
+              borderRadius: "4px",
+              fontFamily: "'Orbitron', monospace",
+              textAlign: "center",
+              transition: "all 0.2s",
+            }}
+          >
+            <div style={{ fontSize: "14px", marginBottom: "2px" }}>{p.icon}</div>
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Safety score */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+        <span style={{ color: "#888888" }}>Safety Score:</span>
+        <span style={{ color: getSafetyColor(weather.safetyScore), fontWeight: "bold", fontFamily: "'Orbitron', monospace" }}>
+          {weather.safetyScore}/100
+        </span>
+      </div>
+      <div style={{ background: "#333333", borderRadius: "2px", height: "4px", marginBottom: "8px" }}>
+        <div style={{
+          background: getSafetyColor(weather.safetyScore),
+          width: `${weather.safetyScore}%`,
+          height: "100%",
+          borderRadius: "2px",
+          transition: "width 0.3s, background 0.3s",
+        }} />
+      </div>
+
+      {/* Flight clearance */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "4px 8px",
+        background: weather.clearForFlight
+          ? "rgba(0, 255, 0, 0.1)"
+          : "rgba(255, 0, 0, 0.15)",
+        border: `1px solid ${weather.clearForFlight ? "#00ff0066" : "#ff444466"}`,
+        borderRadius: "4px",
+        marginBottom: expanded ? "10px" : "0",
+      }}>
+        <span style={{ color: "#888888" }}>Flight Status:</span>
+        <span style={{
+          color: weather.clearForFlight ? "#00ff00" : "#ff4444",
+          fontWeight: "bold",
+          fontFamily: "'Orbitron', monospace",
+          fontSize: "10px",
+        }}>
+          {weather.clearForFlight ? "CLEAR" : "GROUNDED"}
+        </span>
+      </div>
+
+      {/* Expanded details */}
+      {expanded && (
+        <div style={{ borderTop: "1px solid #00ffff33", paddingTop: "8px" }}>
+          <div style={{ color: "#888888", marginBottom: "6px" }}>Current Conditions</div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+            <span style={{ color: "#ffffff" }}>Visibility:</span>
+            <span style={{ color: weather.visibility < 5000 ? "#ffaa00" : "#00ff00" }}>
+              {weather.visibility >= 1000 ? `${(weather.visibility / 1000).toFixed(1)} km` : `${weather.visibility} m`}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+            <span style={{ color: "#ffffff" }}>Wind:</span>
+            <span style={{ color: weather.windSpeed > 15 ? "#ff4444" : weather.windSpeed > 10 ? "#ffaa00" : "#00ff00" }}>
+              {weather.windSpeed} m/s @ {weather.windDirection}°
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+            <span style={{ color: "#ffffff" }}>Temperature:</span>
+            <span style={{ color: "#ffffff" }}>{weather.temperature}°C</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+            <span style={{ color: "#ffffff" }}>Cloud Cover:</span>
+            <span style={{ color: "#ffffff" }}>{weather.cloudCover}%</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+            <span style={{ color: "#ffffff" }}>Precipitation:</span>
+            <span style={{ color: weather.precipitation > 0 ? "#4488ff" : "#666666" }}>
+              {weather.precipitation > 0 ? `${weather.precipitation} mm/h (${weather.precipitationType})` : "None"}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+            <span style={{ color: "#ffffff" }}>Turbulence:</span>
+            <span style={{
+              color: weather.turbulence === "SEVERE" ? "#ff4444"
+                : weather.turbulence === "MODERATE" ? "#ffaa00"
+                : weather.turbulence === "LIGHT" ? "#ffff00"
+                : "#00ff00"
+            }}>
+              {weather.turbulence}
+            </span>
+          </div>
+          {weather.thunderstorm && (
+            <div style={{
+              marginTop: "6px",
+              padding: "4px 8px",
+              background: "rgba(255, 0, 0, 0.2)",
+              border: "1px solid #ff4444",
+              borderRadius: "4px",
+              color: "#ff6666",
+              textAlign: "center",
+              fontFamily: "'Orbitron', monospace",
+              fontSize: "10px",
+              animation: "pulse 1s infinite",
+            }}>
+              THUNDERSTORM ACTIVE
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Footer() {
   const aircraft = useSimulation((state) => state.aircraft);
   const isPlaying = useSimulation((state) => state.isPlaying);
@@ -720,6 +924,7 @@ export function HUD() {
       <ScenarioAlert />
       <CapacityWarnings />
       <ControlPanel />
+      <WeatherPanel />
       <StatisticsPanel />
       <GateInfoModal />
       <div className="hud-bottom">

@@ -5,6 +5,7 @@ import { OrbitControls, Grid } from "@react-three/drei";
 import { CityRing } from "./CityRing";
 import { AircraftRenderer } from "./Aircraft";
 import { Pipelines } from "./Pipeline";
+import { WeatherEffects } from "./Weather";
 import { useSimulation } from "@/lib/stores/useSimulation";
 
 const SD_POSITION: [number, number, number] = [-12, 0, 0];
@@ -98,7 +99,10 @@ export function Scene() {
       
       <Pipelines />
       <AircraftRenderer />
-      
+
+      {/* Weather visualization layer */}
+      <WeatherEffects />
+
       <SimulationLoop />
       
       <OrbitControls

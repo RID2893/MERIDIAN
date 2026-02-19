@@ -2,7 +2,7 @@ import { useRef, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
-import { useSimulation, RING_CONFIGS, type Aircraft as AircraftType } from "@/lib/stores/useSimulation";
+import { useSimulation, RING_CONFIGS, OPERATOR_CONFIGS, type Aircraft as AircraftType } from "@/lib/stores/useSimulation";
 
 const SD_POSITION: [number, number, number] = [-12, 0, 0];
 const LA_POSITION: [number, number, number] = [12, 0, 8];
@@ -22,10 +22,17 @@ const ROUTE_BASE_PATHS = {
   },
 };
 
+// Visual lane separation offsets for corridor variants
 const VARIANT_OFFSETS = {
-  CENTER: { offset: 0, altitude: 1.5 },
-  TOP: { offset: 0.5, altitude: 2.0 },
-  BOTTOM: { offset: -0.5, altitude: 1.0 },
+  CENTER: { offset: 0, altitude: 0 },
+  TOP: { offset: 0.5, altitude: 0.25 },
+  BOTTOM: { offset: -0.5, altitude: -0.25 },
+};
+
+// Base altitudes in scene units (matching useSimulation CORRIDOR_ALTITUDES)
+const CORRIDOR_BASE_ALT = {
+  'N-S': (500 / 1250) * 2,  // 0.8
+  'E-W': (550 / 1250) * 2,  // 0.88
 };
 
 // ============================================================================
@@ -34,23 +41,24 @@ const VARIANT_OFFSETS = {
 // Corridors: N-S (500/600ft), E-W (550/650ft)
 // ============================================================================
 
-const OPERATORS = ['AR', 'JB', 'WK', 'BT', 'LL', 'VL'];
-
-function getOperatorCallsign(id: string): string {
-  const num = parseInt(id.replace(/\D/g, '')) || 0;
-  return `${OPERATORS[num % OPERATORS.length]}-${String(num).padStart(3, '0')}`;
+function getOperatorCallsign(aircraft: AircraftType): string {
+  const num = parseInt(aircraft.id.replace(/\D/g, '')) || 0;
+  return `${aircraft.operator}-${String(num).padStart(3, '0')}`;
 }
 
+// Corridor Directional Altitude Separation (FAA RFI)
+// N-S: Northbound 500ft / Southbound 600ft (TOP=+100, BOTTOM=base)
+// E-W: Eastbound 550ft / Westbound 650ft (TOP=+100, BOTTOM=base)
 function getDisplayAltFt(aircraft: AircraftType): number {
   if (aircraft.status === 'landed') return 0;
   if (aircraft.status === 'in_ring') return RING_CONFIGS[aircraft.ringLevel].altitude;
-  if (aircraft.status === 'in_pipeline') {
-    const isNS = aircraft.pipelineId?.includes('N-S');
-    if (aircraft.pipelineId?.includes('TOP')) return isNS ? 600 : 650;
-    if (aircraft.pipelineId?.includes('BOTTOM')) return isNS ? 500 : 550;
-    return isNS ? 550 : 600;
+  if (aircraft.status === 'in_pipeline' && aircraft.pipelineId) {
+    const isNS = aircraft.pipelineId.includes('N-S');
+    const baseAlt = isNS ? 500 : 550;
+    if (aircraft.pipelineId.includes('TOP')) return baseAlt + 100;
+    if (aircraft.pipelineId.includes('BOTTOM')) return baseAlt - 50;
+    return baseAlt;
   }
-  // Descending/ascending - interpolate between ground and ring altitude
   const ringAlt = RING_CONFIGS[aircraft.ringLevel].altitude;
   return Math.round(Math.max(0, (aircraft.altitude / ringAlt)) * ringAlt);
 }
@@ -69,18 +77,20 @@ function getPipelinePath(pipelineId: string) {
   const parts = pipelineId.split("-");
   const variant = parts[parts.length - 1] as keyof typeof VARIANT_OFFSETS;
   const routeId = parts.slice(0, -1).join("-") as keyof typeof ROUTE_BASE_PATHS;
-  
+
   const baseRoute = ROUTE_BASE_PATHS[routeId];
   if (!baseRoute) return null;
-  
+
   const variantInfo = VARIANT_OFFSETS[variant] || VARIANT_OFFSETS.CENTER;
   const offsetAmount = variantInfo.offset;
-  
-  const start = baseRoute.baseStart.clone().add(new THREE.Vector3(0, variantInfo.altitude, offsetAmount));
-  const end = baseRoute.baseEnd.clone().add(new THREE.Vector3(0, variantInfo.altitude, offsetAmount));
-  const control1 = baseRoute.control1.clone().add(new THREE.Vector3(0, variantInfo.altitude, offsetAmount * 0.5));
-  const control2 = baseRoute.control2.clone().add(new THREE.Vector3(0, variantInfo.altitude, offsetAmount * 0.5));
-  
+  const baseAlt = CORRIDOR_BASE_ALT[routeId] || 0.8;
+  const totalAlt = baseAlt + variantInfo.altitude;
+
+  const start = baseRoute.baseStart.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount));
+  const end = baseRoute.baseEnd.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount));
+  const control1 = baseRoute.control1.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount * 0.5));
+  const control2 = baseRoute.control2.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount * 0.5));
+
   return { start, end, control1, control2 };
 }
 
@@ -189,19 +199,20 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
   }, [aircraft.status, aircraft.color]);
 
   // Flight Data Block - Operation Volume ticker
-  const callsign = useMemo(() => getOperatorCallsign(aircraft.id), [aircraft.id]);
+  const callsign = useMemo(() => getOperatorCallsign(aircraft), [aircraft.id, aircraft.operator]);
+  const opColor = OPERATOR_CONFIGS[aircraft.operator].hex;
   const altFt = getDisplayAltFt(aircraft);
   const speedKph = Math.round(aircraft.speed * 240);
   const opVolume = getOpVolume(aircraft);
   const tickerBorder = useMemo(() => {
     switch (aircraft.status) {
-      case 'in_ring': return '#00aaff';
+      case 'in_ring': return opColor;
       case 'in_pipeline': return '#ffaa00';
       case 'descending': return '#00ff88';
       case 'ascending': return '#ffff00';
       default: return '#666';
     }
-  }, [aircraft.status]);
+  }, [aircraft.status, opColor]);
 
   return (
     <>
@@ -240,7 +251,7 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
               whiteSpace: 'nowrap',
               userSelect: 'none',
             }}>
-              <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '9px' }}>
+              <div style={{ color: opColor, fontWeight: 'bold', fontSize: '9px' }}>
                 {callsign}
               </div>
               <div style={{ color: '#00ffcc' }}>

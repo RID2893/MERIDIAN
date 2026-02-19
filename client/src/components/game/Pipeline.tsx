@@ -22,10 +22,18 @@ const ROUTE_CONFIGS = {
   },
 };
 
+// Corridor base altitudes in scene units (FAA RFI directional separation)
+// N-S: 500ft base → (500/1250)*2 = 0.8 scene units
+// E-W: 550ft base → (550/1250)*2 = 0.88 scene units
+const CORRIDOR_BASE_ALT: Record<string, number> = {
+  'N-S': (500 / 1250) * 2,
+  'E-W': (550 / 1250) * 2,
+};
+
 const VARIANT_OFFSETS = {
-  CENTER: { offset: 0, altitude: 1.5 },
-  TOP: { offset: 0.5, altitude: 2.0 },
-  BOTTOM: { offset: -0.5, altitude: 1.0 },
+  CENTER: { offset: 0, altOffset: 0 },
+  TOP: { offset: 0.5, altOffset: 0.25 },
+  BOTTOM: { offset: -0.5, altOffset: -0.25 },
 };
 
 function FlowParticles({ curve, color }: { curve: THREE.CubicBezierCurve3; color: number }) {
@@ -101,13 +109,15 @@ function PipelineVariantRoute({ routeId, variant, color }: PipelineVariantProps)
   
   const curve = useMemo(() => {
     const offsetAmount = variantOffset.offset;
-    const start = routeConfig.baseStart.clone().add(new THREE.Vector3(0, variantOffset.altitude, offsetAmount));
-    const end = routeConfig.baseEnd.clone().add(new THREE.Vector3(0, variantOffset.altitude, offsetAmount));
-    const ctrl1 = routeConfig.control1.clone().add(new THREE.Vector3(0, variantOffset.altitude, offsetAmount * 0.5));
-    const ctrl2 = routeConfig.control2.clone().add(new THREE.Vector3(0, variantOffset.altitude, offsetAmount * 0.5));
-    
+    const baseAlt = CORRIDOR_BASE_ALT[routeId] || 0.8;
+    const totalAlt = baseAlt + variantOffset.altOffset;
+    const start = routeConfig.baseStart.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount));
+    const end = routeConfig.baseEnd.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount));
+    const ctrl1 = routeConfig.control1.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount * 0.5));
+    const ctrl2 = routeConfig.control2.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount * 0.5));
+
     return new THREE.CubicBezierCurve3(start, ctrl1, ctrl2, end);
-  }, [routeConfig, variantOffset]);
+  }, [routeConfig, variantOffset, routeId]);
   
   const tubeGeometry = useMemo(() => {
     return new THREE.TubeGeometry(curve, 64, 0.05, 8, false);
@@ -143,8 +153,8 @@ function PipelineVariantRoute({ routeId, variant, color }: PipelineVariantProps)
       
       <FlowParticles curve={curve} color={color} />
       
-      <Text position={[midPoint.x, midPoint.y + 0.5, midPoint.z]} fontSize={0.3} color={color} anchorX="center" anchorY="middle">
-        {variant}
+      <Text position={[midPoint.x, midPoint.y + 0.5, midPoint.z]} fontSize={0.25} color={color} anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor={0x000000}>
+        {routeId} {variant}
       </Text>
     </group>
   );

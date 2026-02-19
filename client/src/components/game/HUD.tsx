@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSimulation, SCENARIO_CONFIGS, ScenarioName } from "@/lib/stores/useSimulation";
+import { useSimulation, SCENARIO_CONFIGS, RING_CONFIGS, OPERATOR_CONFIGS, ScenarioName, type OperatorCode, type RingLevel } from "@/lib/stores/useSimulation";
 import { useWeather, type WeatherPreset } from "@/lib/stores/useWeather";
 
 function GateInfoModal() {
@@ -895,6 +895,135 @@ function WeatherPanel() {
   );
 }
 
+// Per-ring capacity limits from RFI: Ring 1: 50-75, Ring 2: 100-150, Ring 3: 75-100
+const RING_CAPACITY: Record<RingLevel, number> = { 1: 75, 2: 150, 3: 100 };
+const CORRIDOR_THROUGHPUT: Record<string, number> = { 'N-S': 60, 'E-W': 45 }; // flights/hr
+
+function AirspaceUtilizationPanel() {
+  const [collapsed, setCollapsed] = useState(true);
+  const aircraft = useSimulation((state) => state.aircraft);
+  const pipelines = useSimulation((state) => state.pipelines);
+
+  // Per-ring counts per city
+  const ringCounts = (city: string) => {
+    const cityAc = aircraft.filter(a => (a.cityId === city || a.originCity === city) && a.status !== 'in_pipeline');
+    return ([1, 2, 3] as RingLevel[]).map(r => ({
+      ring: r,
+      count: cityAc.filter(a => a.ringLevel === r && (a.status === 'in_ring' || a.status === 'ascending')).length,
+      capacity: RING_CAPACITY[r],
+    }));
+  };
+
+  const sdRings = ringCounts("San Diego");
+  const laRings = ringCounts("Los Angeles");
+
+  // Corridor throughput
+  const nsPipelines = pipelines.filter(p => p.id.startsWith("N-S"));
+  const ewPipelines = pipelines.filter(p => p.id.startsWith("E-W"));
+  const nsCount = nsPipelines.reduce((s, p) => s + p.currentCount, 0);
+  const ewCount = ewPipelines.reduce((s, p) => s + p.currentCount, 0);
+
+  // Fleet mix
+  const opCounts: Record<string, number> = {};
+  aircraft.forEach(a => { opCounts[a.operator] = (opCounts[a.operator] || 0) + 1; });
+
+  const getBarColor = (pct: number) => pct >= 80 ? '#ff4444' : pct >= 60 ? '#ffaa00' : '#00ff00';
+
+  const RingBar = ({ ring, count, capacity }: { ring: RingLevel; count: number; capacity: number }) => {
+    const pct = capacity > 0 ? (count / capacity) * 100 : 0;
+    const cfg = RING_CONFIGS[ring];
+    const colorHex = `#${cfg.color.toString(16).padStart(6, '0')}`;
+    return (
+      <div style={{ marginBottom: '4px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+          <span style={{ color: colorHex }}>R{ring}</span>
+          <span style={{ color: getBarColor(pct) }}>{count}/{capacity} ({pct.toFixed(0)}%)</span>
+        </div>
+        <div style={{ background: '#333', borderRadius: '2px', height: '3px' }}>
+          <div style={{ background: getBarColor(pct), width: `${Math.min(pct, 100)}%`, height: '100%', borderRadius: '2px' }} />
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{
+      position: 'absolute',
+      top: '120px',
+      left: '10px',
+      background: 'rgba(0,0,0,0.9)',
+      border: '1px solid #00ffff',
+      borderRadius: '8px',
+      padding: '12px',
+      width: '240px',
+      zIndex: 1000,
+      pointerEvents: 'auto',
+      fontSize: '11px',
+      maxHeight: collapsed ? '30px' : '600px',
+      overflow: collapsed ? 'hidden' : 'auto',
+      transition: 'max-height 0.3s',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <h3 style={{ color: '#00ffff', fontSize: '12px', margin: 0, fontFamily: "'Orbitron', monospace" }}>
+          AIRSPACE UTILIZATION
+        </h3>
+        <button onClick={() => setCollapsed(!collapsed)} style={{ background: 'transparent', border: 'none', color: '#00ffff', cursor: 'pointer', fontSize: '12px', padding: 0 }}>
+          {collapsed ? '▼' : '▲'}
+        </button>
+      </div>
+
+      {!collapsed && (
+        <>
+          {/* San Diego Rings */}
+          <div style={{ color: '#888', marginBottom: '4px', fontSize: '10px' }}>SAN DIEGO — Ring Occupancy</div>
+          {sdRings.map(r => <RingBar key={`sd-${r.ring}`} ring={r.ring} count={r.count} capacity={r.capacity} />)}
+
+          <div style={{ height: '8px' }} />
+
+          {/* LA Rings */}
+          <div style={{ color: '#888', marginBottom: '4px', fontSize: '10px' }}>LOS ANGELES — Ring Occupancy</div>
+          {laRings.map(r => <RingBar key={`la-${r.ring}`} ring={r.ring} count={r.count} capacity={r.capacity} />)}
+
+          <div style={{ height: '8px' }} />
+
+          {/* Corridor Throughput */}
+          <div style={{ color: '#888', marginBottom: '4px', fontSize: '10px' }}>CORRIDOR THROUGHPUT</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+            <span style={{ color: '#fff' }}>N-S Corridor:</span>
+            <span style={{ color: getBarColor((nsCount / CORRIDOR_THROUGHPUT['N-S']) * 100) }}>
+              {nsCount} / {CORRIDOR_THROUGHPUT['N-S']} cap
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+            <span style={{ color: '#fff' }}>E-W Corridor:</span>
+            <span style={{ color: getBarColor((ewCount / CORRIDOR_THROUGHPUT['E-W']) * 100) }}>
+              {ewCount} / {CORRIDOR_THROUGHPUT['E-W']} cap
+            </span>
+          </div>
+
+          <div style={{ height: '8px' }} />
+
+          {/* Fleet Mix */}
+          <div style={{ color: '#888', marginBottom: '4px', fontSize: '10px' }}>FLEET MIX — Operator Distribution</div>
+          {(Object.keys(OPERATOR_CONFIGS) as OperatorCode[]).map(op => {
+            const count = opCounts[op] || 0;
+            const pct = aircraft.length > 0 ? (count / aircraft.length) * 100 : 0;
+            return (
+              <div key={op} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: OPERATOR_CONFIGS[op].hex }} />
+                  <span style={{ color: OPERATOR_CONFIGS[op].hex, fontSize: '10px', fontFamily: "'Courier New', monospace" }}>{op}</span>
+                </div>
+                <span style={{ color: '#aaa', fontSize: '10px' }}>{count} ({pct.toFixed(0)}%)</span>
+              </div>
+            );
+          })}
+        </>
+      )}
+    </div>
+  );
+}
+
 function Footer() {
   const aircraft = useSimulation((state) => state.aircraft);
   const isPlaying = useSimulation((state) => state.isPlaying);
@@ -924,6 +1053,7 @@ export function HUD() {
       <ScenarioAlert />
       <CapacityWarnings />
       <ControlPanel />
+      <AirspaceUtilizationPanel />
       <WeatherPanel />
       <StatisticsPanel />
       <GateInfoModal />

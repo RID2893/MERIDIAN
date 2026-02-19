@@ -12,6 +12,7 @@ export type PipelineVariant = "CENTER" | "TOP" | "BOTTOM";
 export type PipelineName = "N-S-CENTER" | "N-S-TOP" | "N-S-BOTTOM" | "E-W-CENTER" | "E-W-TOP" | "E-W-BOTTOM";
 export type ScenarioName = "normal" | "rush_hour" | "maintenance" | "emergency";
 export type RingLevel = 1 | 2 | 3;
+export type OperatorCode = 'AR' | 'JB' | 'WK' | 'BT' | 'LL' | 'VL';
 
 // Meridian Ring Operation Volume Structure (FAA RFI aligned)
 export const RING_CONFIGS: Record<RingLevel, { radius: number; altitude: number; color: number }> = {
@@ -19,6 +20,18 @@ export const RING_CONFIGS: Record<RingLevel, { radius: number; altitude: number;
   2: { radius: 6, altitude: 500, color: 0x00ffff },   // Middle - Main Corridor
   3: { radius: 9, altitude: 1000, color: 0x8866ff },  // Outer - Regional
 };
+
+// eVTOL Fleet Operator Colors (RFI Section F aligned)
+export const OPERATOR_CONFIGS: Record<OperatorCode, { name: string; color: number; hex: string }> = {
+  AR: { name: 'Archer Aviation', color: 0x00ff88, hex: '#00ff88' },   // Green
+  JB: { name: 'Joby Aviation',   color: 0x4488ff, hex: '#4488ff' },   // Blue
+  WK: { name: 'Wisk Aero',      color: 0xff8800, hex: '#ff8800' },   // Orange
+  BT: { name: 'Beta Technologies', color: 0xff44aa, hex: '#ff44aa' }, // Pink
+  LL: { name: 'Lilium',          color: 0xffdd00, hex: '#ffdd00' },   // Yellow
+  VL: { name: 'Volocopter',      color: 0xaa66ff, hex: '#aa66ff' },   // Purple
+};
+
+const OPERATOR_CODES: OperatorCode[] = ['AR', 'JB', 'WK', 'BT', 'LL', 'VL'];
 
 export interface ScenarioConfig {
   name: string;
@@ -119,6 +132,7 @@ export interface Aircraft {
   descentStartTime: number | null;
   originCity: CityName | null;
   ringLevel: RingLevel;
+  operator: OperatorCode;
 }
 
 export interface Pipeline {
@@ -229,6 +243,15 @@ function createGates(cityId: CityName, disabledGates: string[] = []): Gate[] {
   return gates;
 }
 
+// Corridor Directional Altitude Separation (FAA RFI aligned)
+// N-S: Northbound 500ft / Southbound 600ft
+// E-W: Eastbound 550ft / Westbound 650ft
+// Variant offsets: CENTER = base altitude, TOP = +100ft visual, BOTTOM = -100ft visual
+const CORRIDOR_ALTITUDES = {
+  'N-S': { base: 500, dirOffset: 100 },  // NB 500ft, SB 600ft
+  'E-W': { base: 550, dirOffset: 100 },  // EB 550ft, WB 650ft
+};
+
 function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal): Aircraft[] {
   const aircraft: Aircraft[] = [];
   let id = 1;
@@ -238,6 +261,7 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
   for (let i = 0; i < config.sdAircraftCount; i++) {
     const ring = ringPattern[i % ringPattern.length];
     const rc = RING_CONFIGS[ring];
+    const op = OPERATOR_CODES[i % OPERATOR_CODES.length];
     aircraft.push({
       id: `AC-${String(id++).padStart(3, "0")}`,
       status: "in_ring",
@@ -248,17 +272,19 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
       altitude: rc.altitude,
       targetGate: null,
       pipelineProgress: 0,
-      color: rc.color,
+      color: OPERATOR_CONFIGS[op].color,
       speed: 0.5 + Math.random() * 0.3,
       descentStartTime: null,
       originCity: "San Diego",
       ringLevel: ring,
+      operator: op,
     });
   }
 
   for (let i = 0; i < config.laAircraftCount; i++) {
     const ring = ringPattern[i % ringPattern.length];
     const rc = RING_CONFIGS[ring];
+    const op = OPERATOR_CODES[(i + 3) % OPERATOR_CODES.length]; // Offset for diversity
     aircraft.push({
       id: `AC-${String(id++).padStart(3, "0")}`,
       status: "in_ring",
@@ -269,19 +295,23 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
       altitude: rc.altitude,
       targetGate: null,
       pipelineProgress: 0,
-      color: rc.color,
+      color: OPERATOR_CONFIGS[op].color,
       speed: 0.5 + Math.random() * 0.3,
       descentStartTime: null,
       originCity: "Los Angeles",
       ringLevel: ring,
+      operator: op,
     });
   }
   
   const variants: PipelineVariant[] = ["CENTER", "TOP", "BOTTOM"];
   const aircraftPerVariant = Math.floor(config.pipelineAircraftCount / 6);
   
+  const variantAltOffsets: Record<PipelineVariant, number> = { CENTER: 0, TOP: 0.25, BOTTOM: -0.25 };
   variants.forEach((variant) => {
     for (let i = 0; i < aircraftPerVariant; i++) {
+      const op = OPERATOR_CODES[(id) % OPERATOR_CODES.length];
+      const nsAlt = (CORRIDOR_ALTITUDES['N-S'].base / 1250) * 2 + variantAltOffsets[variant];
       aircraft.push({
         id: `AC-${String(id++).padStart(3, "0")}`,
         status: "in_pipeline",
@@ -289,20 +319,23 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
         pipelineId: `N-S-${variant}` as PipelineName,
         angleOnRing: 0,
         distanceFromCenter: 0,
-        altitude: variant === "CENTER" ? 1.5 : variant === "TOP" ? 2.0 : 1.0,
+        altitude: nsAlt,
         targetGate: null,
         pipelineProgress: Math.random(),
-        color: 0xFFB347,
+        color: OPERATOR_CONFIGS[op].color,
         speed: 0.3 + Math.random() * 0.2,
         descentStartTime: null,
         originCity: "San Diego",
         ringLevel: 2,
+        operator: op,
       });
     }
   });
 
   variants.forEach((variant) => {
     for (let i = 0; i < aircraftPerVariant; i++) {
+      const op = OPERATOR_CODES[(id) % OPERATOR_CODES.length];
+      const ewAlt = (CORRIDOR_ALTITUDES['E-W'].base / 1250) * 2 + variantAltOffsets[variant];
       aircraft.push({
         id: `AC-${String(id++).padStart(3, "0")}`,
         status: "in_pipeline",
@@ -310,14 +343,15 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
         pipelineId: `E-W-${variant}` as PipelineName,
         angleOnRing: 0,
         distanceFromCenter: 0,
-        altitude: variant === "CENTER" ? 1.5 : variant === "TOP" ? 2.0 : 1.0,
+        altitude: ewAlt,
         targetGate: null,
         pipelineProgress: Math.random(),
-        color: 0xFFB347,
+        color: OPERATOR_CONFIGS[op].color,
         speed: 0.3 + Math.random() * 0.2,
         descentStartTime: null,
         originCity: "San Diego",
         ringLevel: 2,
+        operator: op,
       });
     }
   });
@@ -326,45 +360,51 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
 }
 
 function createPipelines(config: ScenarioConfig = SCENARIO_CONFIGS.normal): Pipeline[] {
-  const pipelineVariants: Array<{ variant: PipelineVariant; color: number; altitude: number; capacity: number }> = [
-    { variant: "CENTER", color: 0xff00ff, altitude: 1.5, capacity: config.pipelineCapacity },
-    { variant: "TOP", color: 0xffa500, altitude: 2.0, capacity: Math.floor(config.pipelineCapacity * 0.75) },
-    { variant: "BOTTOM", color: 0x00ffff, altitude: 1.0, capacity: Math.floor(config.pipelineCapacity * 0.75) },
-  ];
-  
+  const variantOffsets: Record<PipelineVariant, number> = {
+    CENTER: 0,
+    TOP: 0.25,    // Higher visual lane
+    BOTTOM: -0.25, // Lower visual lane
+  };
+
   const pipelines: Pipeline[] = [];
   const aircraftPerPipeline = Math.floor(config.pipelineAircraftCount / 6);
-  
-  pipelineVariants.forEach((variant) => {
+  const variants: PipelineVariant[] = ["CENTER", "TOP", "BOTTOM"];
+
+  variants.forEach((variant) => {
+    const cap = variant === "CENTER" ? config.pipelineCapacity : Math.floor(config.pipelineCapacity * 0.75);
+    // N-S corridor: SD→LA (Northbound = 500ft base)
+    const nsAlt = (CORRIDOR_ALTITUDES['N-S'].base / 1250) * 2 + variantOffsets[variant];
     pipelines.push({
-      id: `N-S-${variant.variant}` as PipelineName,
+      id: `N-S-${variant}` as PipelineName,
       fromCity: "San Diego",
       toCity: "Los Angeles",
       fromQuadrant: "North",
       toQuadrant: "North",
-      variant: variant.variant,
-      capacity: variant.capacity,
+      variant,
+      capacity: cap,
       currentCount: aircraftPerPipeline,
       transitTime: 70,
-      color: variant.color,
-      altitude: variant.altitude,
+      color: 0xff00ff,
+      altitude: nsAlt,
     });
-    
+
+    // E-W corridor: SD→LA (Eastbound = 550ft base)
+    const ewAlt = (CORRIDOR_ALTITUDES['E-W'].base / 1250) * 2 + variantOffsets[variant];
     pipelines.push({
-      id: `E-W-${variant.variant}` as PipelineName,
+      id: `E-W-${variant}` as PipelineName,
       fromCity: "San Diego",
       toCity: "Los Angeles",
       fromQuadrant: "East",
       toQuadrant: "West",
-      variant: variant.variant,
-      capacity: variant.capacity,
+      variant,
+      capacity: cap,
       currentCount: aircraftPerPipeline,
       transitTime: 70,
-      color: variant.color,
-      altitude: variant.altitude,
+      color: 0x00ffff,
+      altitude: ewAlt,
     });
   });
-  
+
   return pipelines;
 }
 
@@ -538,6 +578,7 @@ export const useSimulation = create<SimulationState>()(
                 const id = `AC-${Date.now().toString().slice(-3)}${Math.floor(Math.random() * 100)}`;
                 const spawnRing: RingLevel = ([1, 2, 2, 2, 3, 3] as RingLevel[])[Math.floor(Math.random() * 6)];
                 const spawnCfg = RING_CONFIGS[spawnRing];
+                const spawnOp = OPERATOR_CODES[Math.floor(Math.random() * OPERATOR_CODES.length)];
                 state.addAircraft({
                   id,
                   status: "in_ring",
@@ -548,11 +589,12 @@ export const useSimulation = create<SimulationState>()(
                   altitude: spawnCfg.altitude,
                   targetGate: null,
                   pipelineProgress: 0,
-                  color: spawnCfg.color,
+                  color: OPERATOR_CONFIGS[spawnOp].color,
                   speed: 0.5 + Math.random() * 0.3,
                   descentStartTime: null,
                   originCity: origin,
                   ringLevel: spawnRing,
+                  operator: spawnOp,
                 });
               }
             }
@@ -682,7 +724,7 @@ export const useSimulation = create<SimulationState>()(
                   cityId: null,
                   pipelineId: selectedPipeline.id,
                   pipelineProgress: 0,
-                  color: wasRerouted ? 0xff00ff : 0xFFB347,
+                  color: OPERATOR_CONFIGS[aircraft.operator].color,
                 });
                 continue;
               }
@@ -792,7 +834,7 @@ export const useSimulation = create<SimulationState>()(
                 altitude: ringCfg.altitude,
                 status: "in_ring",
                 distanceFromCenter: ringCfg.radius,
-                color: ringCfg.color,
+                color: OPERATOR_CONFIGS[aircraft.operator].color,
                 targetGate: null,
                 cityId: aircraft.originCity,
               });
@@ -829,7 +871,7 @@ export const useSimulation = create<SimulationState>()(
                   angleOnRing: Math.random() * 360,
                   distanceFromCenter: arrivalCfg.radius,
                   altitude: arrivalCfg.altitude,
-                  color: arrivalCfg.color,
+                  color: OPERATOR_CONFIGS[aircraft.operator].color,
                   ringLevel: arrivalRing,
                 });
               } else {

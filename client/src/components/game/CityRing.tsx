@@ -2,7 +2,7 @@ import { useRef, useMemo, useState } from "react";
 import * as THREE from "three";
 import { useFrame, ThreeEvent } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
-import { useSimulation, type CityName, type Gate } from "@/lib/stores/useSimulation";
+import { useSimulation, RING_CONFIGS, type CityName, type Gate, type RingLevel } from "@/lib/stores/useSimulation";
 import { useShallow } from "zustand/react/shallow";
 
 const RING_RADIUS = 6;
@@ -84,6 +84,63 @@ function GateSphere({ gate, cityPosition }: { gate: Gate; cityPosition: [number,
   );
 }
 
+const RING_LABELS: Record<RingLevel, string> = {
+  1: "RING 1 · 150ft · URBAN",
+  2: "RING 2 · 500ft · CORRIDOR",
+  3: "RING 3 · 1000ft · REGIONAL",
+};
+
+function AerialRing({ ringLevel }: { ringLevel: RingLevel }) {
+  const cfg = RING_CONFIGS[ringLevel];
+  const height = (cfg.altitude / 1250) * 2;
+  const ringGeometry = useMemo(() => {
+    const curve = new THREE.EllipseCurve(0, 0, cfg.radius, cfg.radius, 0, 2 * Math.PI, false, 0);
+    const points = curve.getPoints(128);
+    return new THREE.BufferGeometry().setFromPoints(
+      points.map((p) => new THREE.Vector3(p.x, 0, p.y))
+    );
+  }, [cfg.radius]);
+
+  const glowRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (glowRef.current) {
+      const material = glowRef.current.material as THREE.MeshBasicMaterial;
+      material.opacity = 0.15 + Math.sin(state.clock.elapsedTime * 1.5 + ringLevel) * 0.05;
+    }
+  });
+
+  return (
+    <group position={[0, height, 0]}>
+      <lineSegments geometry={ringGeometry}>
+        <lineBasicMaterial color={cfg.color} linewidth={2} transparent opacity={0.6} />
+      </lineSegments>
+      <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[cfg.radius - 0.12, cfg.radius + 0.12, 128]} />
+        <meshStandardMaterial
+          color={cfg.color}
+          emissive={cfg.color}
+          emissiveIntensity={0.4}
+          transparent
+          opacity={0.15}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      <Text
+        position={[cfg.radius + 0.3, 0, 0]}
+        fontSize={0.3}
+        color={cfg.color}
+        anchorX="left"
+        anchorY="middle"
+        outlineWidth={0.02}
+        outlineColor={0x000000}
+      >
+        {RING_LABELS[ringLevel]}
+      </Text>
+    </group>
+  );
+}
+
 export function CityRing({ cityId, position }: CityRingProps) {
   const ringRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
@@ -129,7 +186,12 @@ export function CityRing({ cityId, position }: CityRingProps) {
       {gates.map((gate) => (
         <GateSphere key={gate.id} gate={gate} cityPosition={position} />
       ))}
-      
+
+      {/* Aerial Operation Volume Rings */}
+      <AerialRing ringLevel={1} />
+      <AerialRing ringLevel={2} />
+      <AerialRing ringLevel={3} />
+
       {/* Cardinal Markers */}
       <Text position={[0, 0.1, -6.8]} fontSize={0.6} color={0x00ffff} anchorX="center" anchorY="middle">
         N
@@ -146,7 +208,7 @@ export function CityRing({ cityId, position }: CityRingProps) {
       
       {/* City Name */}
       <Text position={[0, 0.1, 0]} fontSize={0.8} color={0x00ffff} anchorX="center" anchorY="middle" outlineWidth={0.03} outlineColor={0x000000}>
-        {cityId === "San Diego" ? "SAN DIEGO" : "ORANGE COUNTY"}
+        {cityId === "San Diego" ? "SAN DIEGO" : "LOS ANGELES"}
       </Text>
       
       {/* Quadrant Dividers */}

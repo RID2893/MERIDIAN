@@ -11,6 +11,14 @@ export type QuadrantName = "North" | "East" | "South" | "West";
 export type PipelineVariant = "CENTER" | "TOP" | "BOTTOM";
 export type PipelineName = "N-S-CENTER" | "N-S-TOP" | "N-S-BOTTOM" | "E-W-CENTER" | "E-W-TOP" | "E-W-BOTTOM";
 export type ScenarioName = "normal" | "rush_hour" | "maintenance" | "emergency";
+export type RingLevel = 1 | 2 | 3;
+
+// Meridian Ring Operation Volume Structure (FAA RFI aligned)
+export const RING_CONFIGS: Record<RingLevel, { radius: number; altitude: number; color: number }> = {
+  1: { radius: 3, altitude: 150, color: 0x00ff88 },   // Inner - Urban Core
+  2: { radius: 6, altitude: 500, color: 0x00ffff },   // Middle - Main Corridor
+  3: { radius: 9, altitude: 1000, color: 0x8866ff },  // Outer - Regional
+};
 
 export interface ScenarioConfig {
   name: string;
@@ -110,6 +118,7 @@ export interface Aircraft {
   speed: number;
   descentStartTime: number | null;
   originCity: CityName | null;
+  ringLevel: RingLevel;
 }
 
 export interface Pipeline {
@@ -223,40 +232,48 @@ function createGates(cityId: CityName, disabledGates: string[] = []): Gate[] {
 function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal): Aircraft[] {
   const aircraft: Aircraft[] = [];
   let id = 1;
-  
+  // Distribution pattern: 20% Ring 1, 50% Ring 2, 30% Ring 3
+  const ringPattern: RingLevel[] = [2, 2, 3, 2, 1, 2, 3, 2, 2, 3];
+
   for (let i = 0; i < config.sdAircraftCount; i++) {
+    const ring = ringPattern[i % ringPattern.length];
+    const rc = RING_CONFIGS[ring];
     aircraft.push({
       id: `AC-${String(id++).padStart(3, "0")}`,
       status: "in_ring",
       cityId: "San Diego",
       pipelineId: null,
       angleOnRing: Math.random() * 360,
-      distanceFromCenter: RING_RADIUS,
-      altitude: MAX_ALTITUDE,
+      distanceFromCenter: rc.radius,
+      altitude: rc.altitude,
       targetGate: null,
       pipelineProgress: 0,
-      color: 0x0099ff,
+      color: rc.color,
       speed: 0.5 + Math.random() * 0.3,
       descentStartTime: null,
       originCity: "San Diego",
+      ringLevel: ring,
     });
   }
-  
+
   for (let i = 0; i < config.laAircraftCount; i++) {
+    const ring = ringPattern[i % ringPattern.length];
+    const rc = RING_CONFIGS[ring];
     aircraft.push({
       id: `AC-${String(id++).padStart(3, "0")}`,
       status: "in_ring",
       cityId: "Los Angeles",
       pipelineId: null,
       angleOnRing: Math.random() * 360,
-      distanceFromCenter: RING_RADIUS,
-      altitude: MAX_ALTITUDE,
+      distanceFromCenter: rc.radius,
+      altitude: rc.altitude,
       targetGate: null,
       pipelineProgress: 0,
-      color: 0x0099ff,
+      color: rc.color,
       speed: 0.5 + Math.random() * 0.3,
       descentStartTime: null,
       originCity: "Los Angeles",
+      ringLevel: ring,
     });
   }
   
@@ -279,10 +296,11 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
         speed: 0.3 + Math.random() * 0.2,
         descentStartTime: null,
         originCity: "San Diego",
+        ringLevel: 2,
       });
     }
   });
-  
+
   variants.forEach((variant) => {
     for (let i = 0; i < aircraftPerVariant; i++) {
       aircraft.push({
@@ -299,6 +317,7 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
         speed: 0.3 + Math.random() * 0.2,
         descentStartTime: null,
         originCity: "San Diego",
+        ringLevel: 2,
       });
     }
   });
@@ -517,20 +536,23 @@ export const useSimulation = create<SimulationState>()(
               if (origin !== dest) {
                 // Spawn inter-city aircraft
                 const id = `AC-${Date.now().toString().slice(-3)}${Math.floor(Math.random() * 100)}`;
+                const spawnRing: RingLevel = ([1, 2, 2, 2, 3, 3] as RingLevel[])[Math.floor(Math.random() * 6)];
+                const spawnCfg = RING_CONFIGS[spawnRing];
                 state.addAircraft({
                   id,
                   status: "in_ring",
                   cityId: origin,
                   pipelineId: null,
                   angleOnRing: Math.random() * 360,
-                  distanceFromCenter: RING_RADIUS,
-                  altitude: MAX_ALTITUDE,
+                  distanceFromCenter: spawnCfg.radius,
+                  altitude: spawnCfg.altitude,
                   targetGate: null,
                   pipelineProgress: 0,
-                  color: 0x0099ff,
+                  color: spawnCfg.color,
                   speed: 0.5 + Math.random() * 0.3,
                   descentStartTime: null,
                   originCity: origin,
+                  ringLevel: spawnRing,
                 });
               }
             }
@@ -749,24 +771,28 @@ export const useSimulation = create<SimulationState>()(
           }
           
           if (aircraft.status === "ascending") {
+            const ringCfg = RING_CONFIGS[aircraft.ringLevel];
             const newAltitude = aircraft.altitude + 150 * adjustedDelta;
-            
+
             let newDistance = aircraft.distanceFromCenter;
-            if (newDistance < RING_RADIUS) {
-              newDistance += 1 * adjustedDelta;
-              if (newDistance > RING_RADIUS) newDistance = RING_RADIUS;
+            const targetRadius = ringCfg.radius;
+            if (Math.abs(newDistance - targetRadius) > 0.1) {
+              newDistance += Math.sign(targetRadius - newDistance) * 1 * adjustedDelta;
+            } else {
+              newDistance = targetRadius;
             }
-            
-            if (newAltitude >= MAX_ALTITUDE) {
+
+            if (newAltitude >= ringCfg.altitude) {
               newEvents.push({
-                message: `${aircraft.id} rejoined ${aircraft.originCity} ring`,
+                message: `${aircraft.id} rejoined ${aircraft.originCity} Ring ${aircraft.ringLevel}`,
                 type: "success"
               });
               updatedAircraft.push({
                 ...aircraft,
-                altitude: MAX_ALTITUDE,
+                altitude: ringCfg.altitude,
                 status: "in_ring",
-                distanceFromCenter: RING_RADIUS,
+                distanceFromCenter: ringCfg.radius,
+                color: ringCfg.color,
                 targetGate: null,
                 cityId: aircraft.originCity,
               });
@@ -791,6 +817,8 @@ export const useSimulation = create<SimulationState>()(
                   message: `${aircraft.id} arrived at ${pipeline.toCity}`,
                   type: "success"
                 });
+                const arrivalRing: RingLevel = 2;
+                const arrivalCfg = RING_CONFIGS[arrivalRing];
                 updatedAircraft.push({
                   ...aircraft,
                   status: "in_ring",
@@ -799,9 +827,10 @@ export const useSimulation = create<SimulationState>()(
                   pipelineId: null,
                   pipelineProgress: 0,
                   angleOnRing: Math.random() * 360,
-                  distanceFromCenter: RING_RADIUS,
-                  altitude: MAX_ALTITUDE,
-                  color: 0x0099ff,
+                  distanceFromCenter: arrivalCfg.radius,
+                  altitude: arrivalCfg.altitude,
+                  color: arrivalCfg.color,
+                  ringLevel: arrivalRing,
                 });
               } else {
                 updatedAircraft.push(aircraft);

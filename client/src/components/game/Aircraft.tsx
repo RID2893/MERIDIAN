@@ -2,7 +2,7 @@ import { useRef, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
-import { useSimulation, type Aircraft as AircraftType } from "@/lib/stores/useSimulation";
+import { useSimulation, RING_CONFIGS, type Aircraft as AircraftType } from "@/lib/stores/useSimulation";
 
 const SD_POSITION: [number, number, number] = [-12, 0, 0];
 const LA_POSITION: [number, number, number] = [12, 0, 8];
@@ -43,18 +43,20 @@ function getOperatorCallsign(id: string): string {
 
 function getDisplayAltFt(aircraft: AircraftType): number {
   if (aircraft.status === 'landed') return 0;
-  if (aircraft.status === 'in_ring') return 500;
+  if (aircraft.status === 'in_ring') return RING_CONFIGS[aircraft.ringLevel].altitude;
   if (aircraft.status === 'in_pipeline') {
     const isNS = aircraft.pipelineId?.includes('N-S');
     if (aircraft.pipelineId?.includes('TOP')) return isNS ? 600 : 650;
     if (aircraft.pipelineId?.includes('BOTTOM')) return isNS ? 500 : 550;
     return isNS ? 550 : 600;
   }
-  return Math.round(Math.max(0, (aircraft.altitude - 50) / 1200) * 500);
+  // Descending/ascending - interpolate between ground and ring altitude
+  const ringAlt = RING_CONFIGS[aircraft.ringLevel].altitude;
+  return Math.round(Math.max(0, (aircraft.altitude / ringAlt)) * ringAlt);
 }
 
 function getOpVolume(aircraft: AircraftType): string {
-  if (aircraft.status === 'in_ring') return 'RING-2';
+  if (aircraft.status === 'in_ring') return `RING-${aircraft.ringLevel}`;
   if (aircraft.status === 'in_pipeline') {
     return aircraft.pipelineId?.split('-').slice(0, 2).join('-') || 'COR';
   }

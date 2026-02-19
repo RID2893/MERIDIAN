@@ -3,6 +3,7 @@ import { subscribeWithSelector } from "zustand/middleware";
 import { DemandGenerator } from "../../modules/DemandGenerator";
 import { SafetySystem } from "../../modules/SafetySystem";
 import { EventBus } from "../../modules/EventBus";
+import { useWeather } from "./useWeather";
 
 export type AircraftStatus = "in_ring" | "descending" | "landed" | "in_pipeline" | "ascending";
 export type GateStatus = "GREEN" | "YELLOW" | "RED";
@@ -156,6 +157,18 @@ export interface EventLogItem {
   type: "info" | "warning" | "success" | "error";
 }
 
+export interface FlightRequest {
+  id: string;
+  aircraftId: string;
+  operator: OperatorCode;
+  origin: CityName;
+  destination: CityName;
+  requestedTime: Date;
+  status: 'PENDING' | 'APPROVED' | 'DENIED' | 'HOLD';
+  priority: 'NORMAL' | 'PRIORITY' | 'EMERGENCY';
+  reason?: string;
+}
+
 export interface StatisticsSnapshot {
   timestamp: number;
   landingsSD: number;
@@ -187,13 +200,21 @@ export interface SimulationState {
     pipelineTransfers: number;
     reroutings: number;
   };
-  
+
+  // Weather-flight integration
+  weatherGrounded: boolean;          // True when weather prevents operations
+  emergencyOverride: boolean;        // FAA emergency override active
+  flightQueue: FlightRequest[];      // Pending flight requests
+
   play: () => void;
   pause: () => void;
   reset: () => void;
   setSpeed: (speed: number) => void;
   setScenario: (scenario: string) => void;
   selectGate: (gateId: string | null) => void;
+  toggleEmergencyOverride: () => void;
+  approveFlightRequest: (requestId: string) => void;
+  denyFlightRequest: (requestId: string) => void;
   
   addAircraft: (aircraft: Aircraft) => void;
   updateAircraft: (id: string, updates: Partial<Aircraft>) => void;
@@ -438,7 +459,11 @@ export const useSimulation = create<SimulationState>()(
       pipelineTransfers: 0,
       reroutings: 0,
     },
-    
+
+    weatherGrounded: false,
+    emergencyOverride: false,
+    flightQueue: [],
+
     play: () => {
       set({ isPlaying: true });
       get().addEvent("Simulation started", "info");
@@ -469,9 +494,12 @@ export const useSimulation = create<SimulationState>()(
           pipelineTransfers: 0,
           reroutings: 0,
         },
+        weatherGrounded: false,
+        emergencyOverride: false,
+        flightQueue: [],
       });
     },
-    
+
     setSpeed: (speed: number) => {
       set({ speed });
       get().addEvent(`Speed set to ${speed}x`, "info");
@@ -497,6 +525,9 @@ export const useSimulation = create<SimulationState>()(
           pipelineTransfers: 0,
           reroutings: 0,
         },
+        weatherGrounded: false,
+        emergencyOverride: false,
+        flightQueue: [],
       });
       get().addEvent(`Scenario changed to: ${config.name}`, "info");
       if (config.alertMessage) {
@@ -507,7 +538,35 @@ export const useSimulation = create<SimulationState>()(
     selectGate: (gateId: string | null) => {
       set({ selectedGateId: gateId });
     },
-    
+
+    toggleEmergencyOverride: () => {
+      const current = get().emergencyOverride;
+      set({ emergencyOverride: !current });
+      if (!current) {
+        get().addEvent("FAA EMERGENCY OVERRIDE ACTIVATED — All operations resumed", "error");
+      } else {
+        get().addEvent("FAA Emergency Override deactivated — Normal operations", "info");
+      }
+    },
+
+    approveFlightRequest: (requestId: string) => {
+      set((state) => ({
+        flightQueue: state.flightQueue.map(r =>
+          r.id === requestId ? { ...r, status: 'APPROVED' as const } : r
+        ),
+      }));
+      get().addEvent(`Flight request ${requestId} APPROVED`, "success");
+    },
+
+    denyFlightRequest: (requestId: string) => {
+      set((state) => ({
+        flightQueue: state.flightQueue.map(r =>
+          r.id === requestId ? { ...r, status: 'DENIED' as const } : r
+        ),
+      }));
+      get().addEvent(`Flight request ${requestId} DENIED`, "warning");
+    },
+
     addAircraft: (aircraft: Aircraft) => {
       set((state) => ({
         aircraft: [...state.aircraft, aircraft],
@@ -561,14 +620,61 @@ export const useSimulation = create<SimulationState>()(
     tick: (deltaTime: number) => {
       const state = get();
       if (!state.isPlaying) return;
-      
+
+      // Weather-flight integration: read weather conditions
+      const weather = useWeather.getState();
+      const isWeatherGrounded = !weather.clearForFlight && !state.emergencyOverride;
+      const weatherSpeedFactor = weather.safetyScore >= 80 ? 1.0
+        : weather.safetyScore >= 50 ? 0.7
+        : weather.safetyScore >= 20 ? 0.4
+        : 0.1;
+
+      // Update grounded state and fire event on change
+      if (isWeatherGrounded !== state.weatherGrounded) {
+        set({ weatherGrounded: isWeatherGrounded });
+        if (isWeatherGrounded) {
+          get().addEvent("WEATHER HOLD: All new departures suspended — unsafe conditions", "error");
+        } else {
+          get().addEvent("Weather hold lifted — operations resuming", "success");
+        }
+      }
+
+      // Generate flight queue entries when grounded
+      if (isWeatherGrounded && Math.random() < 0.02 * deltaTime) {
+        const cities: CityName[] = ["San Diego", "Los Angeles"];
+        const origin = cities[Math.floor(Math.random() * 2)];
+        const dest = origin === "San Diego" ? "Los Angeles" : "San Diego";
+        const op = OPERATOR_CODES[Math.floor(Math.random() * OPERATOR_CODES.length)];
+        const req: FlightRequest = {
+          id: `FRQ-${Date.now().toString().slice(-5)}`,
+          aircraftId: `AC-${Math.floor(Math.random() * 999).toString().padStart(3, '0')}`,
+          operator: op,
+          origin,
+          destination: dest,
+          requestedTime: new Date(state.simulationTime),
+          status: 'HOLD',
+          priority: Math.random() < 0.1 ? 'EMERGENCY' : Math.random() < 0.3 ? 'PRIORITY' : 'NORMAL',
+          reason: 'Weather hold — awaiting clearance',
+        };
+        set((s) => ({ flightQueue: [...s.flightQueue, req].slice(-20) }));
+      }
+
+      // Auto-clear approved/denied requests after a while
+      if (state.flightQueue.length > 0) {
+        set((s) => ({
+          flightQueue: s.flightQueue.filter(r =>
+            r.status === 'PENDING' || r.status === 'HOLD' ||
+            (Date.now() - r.requestedTime.getTime()) < 30000
+          ),
+        }));
+      }
+
       const hour = state.simulationTime.getHours();
       const day = state.simulationTime.getDay();
-      
-      // Update Demand
-      if (state.aircraft.length < 200) { // Safety limit
+
+      // Update Demand — suppress new spawns when weather grounded
+      if (state.aircraft.length < 200 && !isWeatherGrounded) {
         const odMatrix = demandGenerator.generateODMatrix(hour, day);
-        // Simplified spawn logic: 1% chance per tick to spawn based on demand
         if (Math.random() < 0.05 * deltaTime) {
           Object.entries(odMatrix).forEach(([pair, count]) => {
             if (count > 0 && Math.random() < 0.1) {
@@ -623,7 +729,7 @@ export const useSimulation = create<SimulationState>()(
       }
 
       const scenarioConfig = SCENARIO_CONFIGS[state.selectedScenario as ScenarioName] || defaultConfig;
-      const adjustedDelta = deltaTime * state.speed;
+      const adjustedDelta = deltaTime * state.speed * weatherSpeedFactor;
       const newEvents: { message: string; type: "info" | "warning" | "success" | "error" }[] = [];
       
       const reservedGates = new Set<string>();
@@ -682,7 +788,7 @@ export const useSimulation = create<SimulationState>()(
               }
             }
             
-            if (Math.random() < scenarioConfig.pipelineTransferProbability * adjustedDelta) {
+            if (!isWeatherGrounded && Math.random() < scenarioConfig.pipelineTransferProbability * adjustedDelta) {
               const availablePipelines = prevState.pipelines.filter(
                 (p) => p.fromCity === aircraft.cityId && 
                        newPipelineCounts[p.id] < p.capacity
@@ -789,7 +895,8 @@ export const useSimulation = create<SimulationState>()(
           }
           
           if (aircraft.status === "landed") {
-            if (Math.random() < scenarioConfig.departureProbability * adjustedDelta) {
+            // Weather hold: no departures unless emergency override
+            if (!isWeatherGrounded && Math.random() < scenarioConfig.departureProbability * adjustedDelta) {
               const gateId = aircraft.targetGate;
               newReservedGates.delete(gateId || "");
               newEvents.push({

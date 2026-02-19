@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSimulation, SCENARIO_CONFIGS, RING_CONFIGS, OPERATOR_CONFIGS, ScenarioName, type OperatorCode, type RingLevel } from "@/lib/stores/useSimulation";
+import { useSimulation, SCENARIO_CONFIGS, RING_CONFIGS, OPERATOR_CONFIGS, ScenarioName, type OperatorCode, type RingLevel, type FlightRequest } from "@/lib/stores/useSimulation";
 import { useWeather, type WeatherPreset } from "@/lib/stores/useWeather";
 
 function GateInfoModal() {
@@ -895,6 +895,214 @@ function WeatherPanel() {
   );
 }
 
+function EmergencyOverridePanel() {
+  const weatherGrounded = useSimulation((state) => state.weatherGrounded);
+  const emergencyOverride = useSimulation((state) => state.emergencyOverride);
+  const toggleEmergencyOverride = useSimulation((state) => state.toggleEmergencyOverride);
+
+  return (
+    <div style={{
+      position: 'absolute',
+      top: '70px',
+      right: '10px',
+      zIndex: 1001,
+      pointerEvents: 'auto',
+    }}>
+      {/* Weather grounded indicator */}
+      {weatherGrounded && !emergencyOverride && (
+        <div style={{
+          background: 'rgba(255, 0, 0, 0.25)',
+          border: '2px solid #ff4444',
+          borderRadius: '6px',
+          padding: '8px 14px',
+          marginBottom: '8px',
+          textAlign: 'center',
+          animation: 'pulse 1s infinite',
+        }}>
+          <div style={{ color: '#ff6666', fontFamily: "'Orbitron', monospace", fontSize: '12px', fontWeight: 'bold' }}>
+            WEATHER HOLD ACTIVE
+          </div>
+          <div style={{ color: '#ff9999', fontSize: '10px', marginTop: '2px' }}>
+            Departures & transfers suspended
+          </div>
+        </div>
+      )}
+
+      {/* Emergency override active */}
+      {emergencyOverride && (
+        <div style={{
+          background: 'rgba(255, 100, 0, 0.3)',
+          border: '2px solid #ff8800',
+          borderRadius: '6px',
+          padding: '8px 14px',
+          marginBottom: '8px',
+          textAlign: 'center',
+          animation: 'pulse 0.5s infinite',
+        }}>
+          <div style={{ color: '#ffaa00', fontFamily: "'Orbitron', monospace", fontSize: '12px', fontWeight: 'bold' }}>
+            FAA OVERRIDE ACTIVE
+          </div>
+          <div style={{ color: '#ffcc66', fontSize: '10px', marginTop: '2px' }}>
+            Operations resumed despite weather
+          </div>
+        </div>
+      )}
+
+      {/* Override button */}
+      <button
+        onClick={toggleEmergencyOverride}
+        style={{
+          width: '100%',
+          padding: '10px 16px',
+          background: emergencyOverride
+            ? 'linear-gradient(180deg, rgba(255,100,0,0.4), rgba(255,50,0,0.6))'
+            : weatherGrounded
+            ? 'linear-gradient(180deg, rgba(255,0,0,0.3), rgba(200,0,0,0.5))'
+            : 'rgba(40,40,60,0.8)',
+          border: emergencyOverride
+            ? '2px solid #ff8800'
+            : weatherGrounded
+            ? '2px solid #ff4444'
+            : '1px solid #444466',
+          borderRadius: '6px',
+          color: emergencyOverride ? '#ffaa00' : weatherGrounded ? '#ff6666' : '#666',
+          fontFamily: "'Orbitron', monospace",
+          fontSize: '11px',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          letterSpacing: '1px',
+        }}
+      >
+        {emergencyOverride ? 'DEACTIVATE OVERRIDE' : 'FAA EMERGENCY OVERRIDE'}
+      </button>
+    </div>
+  );
+}
+
+function FlightQueuePanel() {
+  const [collapsed, setCollapsed] = useState(true);
+  const flightQueue = useSimulation((state) => state.flightQueue);
+  const approveFlightRequest = useSimulation((state) => state.approveFlightRequest);
+  const denyFlightRequest = useSimulation((state) => state.denyFlightRequest);
+  const weatherGrounded = useSimulation((state) => state.weatherGrounded);
+
+  const pendingRequests = flightQueue.filter(r => r.status === 'HOLD' || r.status === 'PENDING');
+
+  if (pendingRequests.length === 0 && !weatherGrounded) return null;
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'EMERGENCY': return '#ff4444';
+      case 'PRIORITY': return '#ffaa00';
+      default: return '#00ffcc';
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'absolute',
+      bottom: '120px',
+      right: '10px',
+      background: 'rgba(0,0,0,0.92)',
+      border: '1px solid #ffaa00',
+      borderRadius: '8px',
+      padding: '12px',
+      width: '260px',
+      zIndex: 1000,
+      pointerEvents: 'auto',
+      fontSize: '11px',
+      maxHeight: collapsed ? '30px' : '350px',
+      overflow: collapsed ? 'hidden' : 'auto',
+      transition: 'max-height 0.3s',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <h3 style={{ color: '#ffaa00', fontSize: '12px', margin: 0, fontFamily: "'Orbitron', monospace" }}>
+          FLIGHT QUEUE ({pendingRequests.length})
+        </h3>
+        <button onClick={() => setCollapsed(!collapsed)} style={{ background: 'transparent', border: 'none', color: '#ffaa00', cursor: 'pointer', fontSize: '12px', padding: 0 }}>
+          {collapsed ? '▼' : '▲'}
+        </button>
+      </div>
+
+      {!collapsed && (
+        <>
+          {pendingRequests.length === 0 ? (
+            <div style={{ color: '#666', textAlign: 'center', padding: '10px 0', fontSize: '10px' }}>
+              No pending flight requests
+            </div>
+          ) : (
+            pendingRequests.map(req => (
+              <div key={req.id} style={{
+                background: 'rgba(255,170,0,0.08)',
+                border: `1px solid ${getPriorityColor(req.priority)}33`,
+                borderRadius: '4px',
+                padding: '8px',
+                marginBottom: '6px',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ color: OPERATOR_CONFIGS[req.operator].hex, fontWeight: 'bold', fontFamily: "'Courier New', monospace" }}>
+                    {req.operator}-{req.aircraftId.slice(-3)}
+                  </span>
+                  <span style={{
+                    color: getPriorityColor(req.priority),
+                    fontSize: '9px',
+                    fontFamily: "'Orbitron', monospace",
+                    border: `1px solid ${getPriorityColor(req.priority)}`,
+                    padding: '1px 6px',
+                    borderRadius: '3px',
+                  }}>
+                    {req.priority}
+                  </span>
+                </div>
+                <div style={{ color: '#aaa', fontSize: '10px', marginBottom: '4px' }}>
+                  {req.origin === 'San Diego' ? 'SD' : 'LA'} → {req.destination === 'San Diego' ? 'SD' : 'LA'}
+                </div>
+                <div style={{ color: '#888', fontSize: '9px', marginBottom: '6px' }}>
+                  {req.reason}
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={() => approveFlightRequest(req.id)}
+                    style={{
+                      flex: 1,
+                      padding: '4px',
+                      background: 'rgba(0,255,0,0.15)',
+                      border: '1px solid #00ff00',
+                      color: '#00ff00',
+                      borderRadius: '3px',
+                      cursor: 'pointer',
+                      fontSize: '9px',
+                      fontFamily: "'Orbitron', monospace",
+                    }}
+                  >
+                    APPROVE
+                  </button>
+                  <button
+                    onClick={() => denyFlightRequest(req.id)}
+                    style={{
+                      flex: 1,
+                      padding: '4px',
+                      background: 'rgba(255,0,0,0.15)',
+                      border: '1px solid #ff4444',
+                      color: '#ff4444',
+                      borderRadius: '3px',
+                      cursor: 'pointer',
+                      fontSize: '9px',
+                      fontFamily: "'Orbitron', monospace",
+                    }}
+                  >
+                    DENY
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // Per-ring capacity limits from RFI: Ring 1: 50-75, Ring 2: 100-150, Ring 3: 75-100
 const RING_CAPACITY: Record<RingLevel, number> = { 1: 75, 2: 150, 3: 100 };
 const CORRIDOR_THROUGHPUT: Record<string, number> = { 'N-S': 60, 'E-W': 45 }; // flights/hr
@@ -1053,8 +1261,10 @@ export function HUD() {
       <ScenarioAlert />
       <CapacityWarnings />
       <ControlPanel />
+      <EmergencyOverridePanel />
       <AirspaceUtilizationPanel />
       <WeatherPanel />
+      <FlightQueuePanel />
       <StatisticsPanel />
       <GateInfoModal />
       <div className="hud-bottom">

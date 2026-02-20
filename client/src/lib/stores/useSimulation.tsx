@@ -169,6 +169,33 @@ export interface FlightRequest {
   reason?: string;
 }
 
+// Revenue split model: 70% operator / 20% AAM Institute / 10% city
+export const REVENUE_SPLIT = { operator: 0.70, aam: 0.20, city: 0.10 };
+export const LANDING_FEE = 85; // $ per landing/departure operation
+
+export interface RevenueRecord {
+  totalRevenue: number;
+  operatorShare: number;
+  aamShare: number;
+  cityShare: number;
+  byOperator: Record<OperatorCode, number>;
+  byCity: Record<string, number>;
+}
+
+export interface BlockchainTransaction {
+  id: string;
+  timestamp: Date;
+  type: 'LANDING_FEE' | 'DEPARTURE_FEE' | 'CORRIDOR_TOLL';
+  operator: OperatorCode;
+  city: CityName;
+  amount: number;
+  operatorPay: number;
+  aamPay: number;
+  cityPay: number;
+  aircraftId: string;
+  blockHash: string;
+}
+
 export interface StatisticsSnapshot {
   timestamp: number;
   landingsSD: number;
@@ -205,6 +232,10 @@ export interface SimulationState {
   weatherGrounded: boolean;          // True when weather prevents operations
   emergencyOverride: boolean;        // FAA emergency override active
   flightQueue: FlightRequest[];      // Pending flight requests
+
+  // Revenue & blockchain
+  revenue: RevenueRecord;
+  blockchain: BlockchainTransaction[];
 
   play: () => void;
   pause: () => void;
@@ -436,6 +467,13 @@ const citiesConfig = [
   { name: "Los Angeles", position: { x: 12, y: 0, z: 8 }, gateCount: 112 }
 ];
 
+function generateBlockHash(): string {
+  const chars = '0123456789abcdef';
+  let hash = '0x';
+  for (let i = 0; i < 12; i++) hash += chars[Math.floor(Math.random() * 16)];
+  return hash;
+}
+
 const demandGenerator = new DemandGenerator(60, citiesConfig);
 const safetySystem = new SafetySystem();
 
@@ -463,6 +501,16 @@ export const useSimulation = create<SimulationState>()(
     weatherGrounded: false,
     emergencyOverride: false,
     flightQueue: [],
+
+    revenue: {
+      totalRevenue: 0,
+      operatorShare: 0,
+      aamShare: 0,
+      cityShare: 0,
+      byOperator: { AR: 0, JB: 0, WK: 0, BT: 0, LL: 0, VL: 0 },
+      byCity: { 'San Diego': 0, 'Los Angeles': 0 },
+    },
+    blockchain: [],
 
     play: () => {
       set({ isPlaying: true });
@@ -497,6 +545,12 @@ export const useSimulation = create<SimulationState>()(
         weatherGrounded: false,
         emergencyOverride: false,
         flightQueue: [],
+        revenue: {
+          totalRevenue: 0, operatorShare: 0, aamShare: 0, cityShare: 0,
+          byOperator: { AR: 0, JB: 0, WK: 0, BT: 0, LL: 0, VL: 0 },
+          byCity: { 'San Diego': 0, 'Los Angeles': 0 },
+        },
+        blockchain: [],
       });
     },
 
@@ -528,6 +582,12 @@ export const useSimulation = create<SimulationState>()(
         weatherGrounded: false,
         emergencyOverride: false,
         flightQueue: [],
+        revenue: {
+          totalRevenue: 0, operatorShare: 0, aamShare: 0, cityShare: 0,
+          byOperator: { AR: 0, JB: 0, WK: 0, BT: 0, LL: 0, VL: 0 },
+          byCity: { 'San Diego': 0, 'Los Angeles': 0 },
+        },
+        blockchain: [],
       });
       get().addEvent(`Scenario changed to: ${config.name}`, "info");
       if (config.alertMessage) {
@@ -748,6 +808,7 @@ export const useSimulation = create<SimulationState>()(
         const updatedAircraft: Aircraft[] = [];
         const newReservedGates = new Set<string>(reservedGates);
         const newPipelineCounts = { ...pipelineCounts };
+        const newTransactions: BlockchainTransaction[] = [];
         const statsUpdates = {
           landingsSD: 0,
           landingsLA: 0,
@@ -869,11 +930,25 @@ export const useSimulation = create<SimulationState>()(
                 message: `${aircraft.id} landed at ${aircraft.targetGate}`,
                 type: "success"
               });
-              if (aircraft.originCity === "San Diego") {
+              const landCity = aircraft.originCity || "San Diego";
+              if (landCity === "San Diego") {
                 statsUpdates.landingsSD++;
-              } else if (aircraft.originCity === "Los Angeles") {
+              } else {
                 statsUpdates.landingsLA++;
               }
+              newTransactions.push({
+                id: `TX-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5)}`,
+                timestamp: new Date(prevState.simulationTime),
+                type: 'LANDING_FEE',
+                operator: aircraft.operator,
+                city: landCity as CityName,
+                amount: LANDING_FEE,
+                operatorPay: LANDING_FEE * REVENUE_SPLIT.operator,
+                aamPay: LANDING_FEE * REVENUE_SPLIT.aam,
+                cityPay: LANDING_FEE * REVENUE_SPLIT.city,
+                aircraftId: aircraft.id,
+                blockHash: generateBlockHash(),
+              });
               updatedAircraft.push({
                 ...aircraft,
                 altitude: GROUND_ALTITUDE,
@@ -903,11 +978,25 @@ export const useSimulation = create<SimulationState>()(
                 message: `${aircraft.id} departing from ${gateId}`,
                 type: "info"
               });
-              if (aircraft.originCity === "San Diego") {
+              const depCity = aircraft.originCity || "San Diego";
+              if (depCity === "San Diego") {
                 statsUpdates.departuresSD++;
-              } else if (aircraft.originCity === "Los Angeles") {
+              } else {
                 statsUpdates.departuresLA++;
               }
+              newTransactions.push({
+                id: `TX-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5)}`,
+                timestamp: new Date(prevState.simulationTime),
+                type: 'DEPARTURE_FEE',
+                operator: aircraft.operator,
+                city: depCity as CityName,
+                amount: LANDING_FEE,
+                operatorPay: LANDING_FEE * REVENUE_SPLIT.operator,
+                aamPay: LANDING_FEE * REVENUE_SPLIT.aam,
+                cityPay: LANDING_FEE * REVENUE_SPLIT.city,
+                aircraftId: aircraft.id,
+                blockHash: generateBlockHash(),
+              });
               updatedAircraft.push({
                 ...aircraft,
                 status: "ascending",
@@ -1039,6 +1128,21 @@ export const useSimulation = create<SimulationState>()(
           type: e.type,
         }));
         
+        // Accumulate revenue from new transactions
+        const txTotal = newTransactions.reduce((s, t) => s + t.amount, 0);
+        const updatedRevenue: RevenueRecord = {
+          totalRevenue: prevState.revenue.totalRevenue + txTotal,
+          operatorShare: prevState.revenue.operatorShare + txTotal * REVENUE_SPLIT.operator,
+          aamShare: prevState.revenue.aamShare + txTotal * REVENUE_SPLIT.aam,
+          cityShare: prevState.revenue.cityShare + txTotal * REVENUE_SPLIT.city,
+          byOperator: { ...prevState.revenue.byOperator },
+          byCity: { ...prevState.revenue.byCity },
+        };
+        newTransactions.forEach(tx => {
+          updatedRevenue.byOperator[tx.operator] = (updatedRevenue.byOperator[tx.operator] || 0) + tx.operatorPay;
+          updatedRevenue.byCity[tx.city] = (updatedRevenue.byCity[tx.city] || 0) + tx.cityPay;
+        });
+
         return {
           aircraft: updatedAircraft,
           gates: updatedGates,
@@ -1053,6 +1157,8 @@ export const useSimulation = create<SimulationState>()(
             pipelineTransfers: prevState.currentStats.pipelineTransfers + statsUpdates.pipelineTransfers,
             reroutings: prevState.currentStats.reroutings + statsUpdates.reroutings,
           },
+          revenue: updatedRevenue,
+          blockchain: [...newTransactions, ...prevState.blockchain].slice(0, 50),
         };
       });
     },

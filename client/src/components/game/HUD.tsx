@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSimulation, SCENARIO_CONFIGS, RING_CONFIGS, OPERATOR_CONFIGS, ScenarioName, type OperatorCode, type RingLevel, type FlightRequest } from "@/lib/stores/useSimulation";
+import { useSimulation, SCENARIO_CONFIGS, RING_CONFIGS, OPERATOR_CONFIGS, REVENUE_SPLIT, ScenarioName, type OperatorCode, type RingLevel, type FlightRequest, type BlockchainTransaction } from "@/lib/stores/useSimulation";
 import { useWeather, type WeatherPreset } from "@/lib/stores/useWeather";
 
 function GateInfoModal() {
@@ -1232,6 +1232,196 @@ function AirspaceUtilizationPanel() {
   );
 }
 
+function RevenueTicker() {
+  const [collapsed, setCollapsed] = useState(true);
+  const revenue = useSimulation((state) => state.revenue);
+
+  const fmt = (n: number) => `$${n.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+
+  return (
+    <div style={{
+      position: 'absolute',
+      bottom: '120px',
+      left: '10px',
+      background: 'rgba(0,0,0,0.92)',
+      border: '1px solid #00ff88',
+      borderRadius: '8px',
+      padding: '12px',
+      width: '240px',
+      zIndex: 1000,
+      pointerEvents: 'auto',
+      fontSize: '11px',
+      maxHeight: collapsed ? '30px' : '400px',
+      overflow: collapsed ? 'hidden' : 'auto',
+      transition: 'max-height 0.3s',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <h3 style={{ color: '#00ff88', fontSize: '12px', margin: 0, fontFamily: "'Orbitron', monospace" }}>
+          REVENUE {fmt(revenue.totalRevenue)}
+        </h3>
+        <button onClick={() => setCollapsed(!collapsed)} style={{ background: 'transparent', border: 'none', color: '#00ff88', cursor: 'pointer', fontSize: '12px', padding: 0 }}>
+          {collapsed ? '▼' : '▲'}
+        </button>
+      </div>
+
+      {!collapsed && (
+        <>
+          {/* Split breakdown */}
+          <div style={{ color: '#888', marginBottom: '6px', fontSize: '10px' }}>REVENUE SPLIT MODEL</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+            <span style={{ color: '#00ff88' }}>Operators (70%):</span>
+            <span style={{ color: '#00ff88', fontFamily: "'Courier New', monospace" }}>{fmt(revenue.operatorShare)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+            <span style={{ color: '#4488ff' }}>AAM Institute (20%):</span>
+            <span style={{ color: '#4488ff', fontFamily: "'Courier New', monospace" }}>{fmt(revenue.aamShare)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ color: '#ffaa00' }}>City Revenue (10%):</span>
+            <span style={{ color: '#ffaa00', fontFamily: "'Courier New', monospace" }}>{fmt(revenue.cityShare)}</span>
+          </div>
+
+          {/* Split bar visualization */}
+          <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', marginBottom: '10px' }}>
+            <div style={{ width: '70%', background: '#00ff88' }} />
+            <div style={{ width: '20%', background: '#4488ff' }} />
+            <div style={{ width: '10%', background: '#ffaa00' }} />
+          </div>
+
+          {/* Per-operator revenue */}
+          <div style={{ color: '#888', marginBottom: '4px', fontSize: '10px' }}>OPERATOR EARNINGS</div>
+          {(Object.keys(OPERATOR_CONFIGS) as OperatorCode[]).map(op => (
+            <div key={op} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: OPERATOR_CONFIGS[op].hex }} />
+                <span style={{ color: OPERATOR_CONFIGS[op].hex, fontSize: '10px' }}>{op}</span>
+              </div>
+              <span style={{ color: '#aaa', fontSize: '10px', fontFamily: "'Courier New', monospace" }}>
+                {fmt(revenue.byOperator[op] || 0)}
+              </span>
+            </div>
+          ))}
+
+          <div style={{ height: '8px' }} />
+
+          {/* Per-city revenue */}
+          <div style={{ color: '#888', marginBottom: '4px', fontSize: '10px' }}>CITY REVENUE</div>
+          {Object.entries(revenue.byCity).map(([city, amount]) => (
+            <div key={city} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+              <span style={{ color: '#fff', fontSize: '10px' }}>{city === 'San Diego' ? 'SD' : 'LA'}</span>
+              <span style={{ color: '#ffaa00', fontSize: '10px', fontFamily: "'Courier New', monospace" }}>
+                {fmt(amount)}
+              </span>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+function BlockchainLedger() {
+  const [collapsed, setCollapsed] = useState(true);
+  const blockchain = useSimulation((state) => state.blockchain);
+
+  const getTypeLabel = (type: BlockchainTransaction['type']) => {
+    switch (type) {
+      case 'LANDING_FEE': return 'LND';
+      case 'DEPARTURE_FEE': return 'DEP';
+      case 'CORRIDOR_TOLL': return 'COR';
+    }
+  };
+
+  const getTypeColor = (type: BlockchainTransaction['type']) => {
+    switch (type) {
+      case 'LANDING_FEE': return '#00ff00';
+      case 'DEPARTURE_FEE': return '#ffaa00';
+      case 'CORRIDOR_TOLL': return '#ff00ff';
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: '80px',
+      right: '10px',
+      background: 'rgba(0,0,0,0.92)',
+      border: '1px solid #aa66ff',
+      borderRadius: '8px',
+      padding: '12px',
+      width: '280px',
+      zIndex: 1000,
+      pointerEvents: 'auto',
+      fontSize: '11px',
+      maxHeight: collapsed ? '30px' : '350px',
+      overflow: collapsed ? 'hidden' : 'auto',
+      transition: 'max-height 0.3s',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <h3 style={{ color: '#aa66ff', fontSize: '12px', margin: 0, fontFamily: "'Orbitron', monospace" }}>
+          BLOCKCHAIN LEDGER ({blockchain.length})
+        </h3>
+        <button onClick={() => setCollapsed(!collapsed)} style={{ background: 'transparent', border: 'none', color: '#aa66ff', cursor: 'pointer', fontSize: '12px', padding: 0 }}>
+          {collapsed ? '▼' : '▲'}
+        </button>
+      </div>
+
+      {!collapsed && (
+        <>
+          {blockchain.length === 0 ? (
+            <div style={{ color: '#666', textAlign: 'center', padding: '10px 0', fontSize: '10px' }}>
+              No transactions yet — start simulation
+            </div>
+          ) : (
+            blockchain.slice(0, 20).map(tx => (
+              <div key={tx.id} style={{
+                background: 'rgba(170,102,255,0.06)',
+                border: '1px solid #aa66ff22',
+                borderRadius: '4px',
+                padding: '6px 8px',
+                marginBottom: '4px',
+                fontSize: '9px',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                  <span style={{ color: '#aa66ff', fontFamily: "'Courier New', monospace" }}>
+                    {tx.blockHash}
+                  </span>
+                  <span style={{
+                    color: getTypeColor(tx.type),
+                    border: `1px solid ${getTypeColor(tx.type)}`,
+                    padding: '0 4px',
+                    borderRadius: '2px',
+                    fontSize: '8px',
+                    fontFamily: "'Orbitron', monospace",
+                  }}>
+                    {getTypeLabel(tx.type)}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: OPERATOR_CONFIGS[tx.operator].hex }} />
+                    <span style={{ color: OPERATOR_CONFIGS[tx.operator].hex }}>{tx.operator}-{tx.aircraftId.slice(-3)}</span>
+                    <span style={{ color: '#666' }}>@</span>
+                    <span style={{ color: '#aaa' }}>{tx.city === 'San Diego' ? 'SD' : 'LA'}</span>
+                  </div>
+                  <span style={{ color: '#00ff88', fontFamily: "'Courier New', monospace", fontWeight: 'bold' }}>
+                    ${tx.amount}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px', color: '#555', fontSize: '8px' }}>
+                  <span>Op: ${tx.operatorPay.toFixed(0)}</span>
+                  <span>AAM: ${tx.aamPay.toFixed(0)}</span>
+                  <span>City: ${tx.cityPay.toFixed(0)}</span>
+                </div>
+              </div>
+            ))
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function Footer() {
   const aircraft = useSimulation((state) => state.aircraft);
   const isPlaying = useSimulation((state) => state.isPlaying);
@@ -1265,6 +1455,8 @@ export function HUD() {
       <AirspaceUtilizationPanel />
       <WeatherPanel />
       <FlightQueuePanel />
+      <RevenueTicker />
+      <BlockchainLedger />
       <StatisticsPanel />
       <GateInfoModal />
       <div className="hud-bottom">

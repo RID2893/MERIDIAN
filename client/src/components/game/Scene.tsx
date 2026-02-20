@@ -1,7 +1,7 @@
 import { useRef, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { OrbitControls, Grid } from "@react-three/drei";
+import { OrbitControls, Grid, Text } from "@react-three/drei";
 import { CityRing } from "./CityRing";
 import { AircraftRenderer } from "./Aircraft";
 import { Pipelines } from "./Pipeline";
@@ -194,6 +194,96 @@ function ConflictAlerts() {
   );
 }
 
+// ============================================================================
+// VERTIPORT STRUCTURES - 3D landing pad visualization at city centers
+// Each city has a central vertiport hub with landing pads and beacon tower
+// ============================================================================
+
+function VertiportPad({ position, padId }: { position: [number, number, number]; padId: string }) {
+  const glowRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (glowRef.current) {
+      const mat = glowRef.current.material as THREE.MeshStandardMaterial;
+      mat.emissiveIntensity = 0.3 + Math.sin(state.clock.elapsedTime * 2 + position[0]) * 0.15;
+    }
+  });
+
+  return (
+    <group position={position}>
+      {/* Landing pad base */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <circleGeometry args={[0.4, 16]} />
+        <meshStandardMaterial color={0x003344} roughness={0.5} />
+      </mesh>
+      {/* Pad ring */}
+      <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+        <ringGeometry args={[0.3, 0.4, 16]} />
+        <meshStandardMaterial color={0x00ffff} emissive={0x00ffff} emissiveIntensity={0.3} transparent opacity={0.7} />
+      </mesh>
+      {/* H marking */}
+      <Text position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.2} color={0x00ffcc} anchorX="center" anchorY="middle">
+        H
+      </Text>
+    </group>
+  );
+}
+
+function VertiportStructure({ position, cityName }: { position: [number, number, number]; cityName: string }) {
+  const beaconRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (beaconRef.current) {
+      const mat = beaconRef.current.material as THREE.MeshStandardMaterial;
+      mat.emissiveIntensity = 0.5 + Math.sin(state.clock.elapsedTime * 3) * 0.5;
+    }
+  });
+
+  // 4 landing pads around the center
+  const padPositions: [number, number, number][] = [
+    [1.2, 0, 0], [-1.2, 0, 0], [0, 0, 1.2], [0, 0, -1.2],
+  ];
+
+  return (
+    <group position={position}>
+      {/* Main platform */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.48, 0]} receiveShadow>
+        <circleGeometry args={[2, 32]} />
+        <meshStandardMaterial color={0x112233} roughness={0.7} metalness={0.3} />
+      </mesh>
+
+      {/* Elevated platform ring */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.47, 0]}>
+        <ringGeometry args={[1.8, 2, 32]} />
+        <meshStandardMaterial color={0x00ffff} emissive={0x00ffff} emissiveIntensity={0.2} transparent opacity={0.5} />
+      </mesh>
+
+      {/* Control tower */}
+      <mesh position={[0, 0.2, 0]}>
+        <cylinderGeometry args={[0.15, 0.2, 1.2, 8]} />
+        <meshStandardMaterial color={0x223344} roughness={0.3} metalness={0.6} />
+      </mesh>
+
+      {/* Beacon light */}
+      <mesh ref={beaconRef} position={[0, 0.85, 0]}>
+        <sphereGeometry args={[0.08, 8, 8]} />
+        <meshStandardMaterial color={0x00ff88} emissive={0x00ff88} emissiveIntensity={0.5} />
+      </mesh>
+      <pointLight position={[0, 0.85, 0]} color={0x00ff88} intensity={0.5} distance={5} />
+
+      {/* Landing pads */}
+      {padPositions.map((pos, i) => (
+        <VertiportPad key={i} position={pos} padId={`${cityName}-PAD-${i + 1}`} />
+      ))}
+
+      {/* Label */}
+      <Text position={[0, 1.2, 0]} fontSize={0.3} color={0x00ffcc} anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor={0x000000}>
+        VERTIPORT
+      </Text>
+    </group>
+  );
+}
+
 export function Scene() {
   return (
     <>
@@ -205,6 +295,10 @@ export function Scene() {
       
       <CityRing cityId="San Diego" position={SD_POSITION} />
       <CityRing cityId="Los Angeles" position={LA_POSITION} />
+
+      {/* Vertiport landing infrastructure at city centers */}
+      <VertiportStructure position={SD_POSITION} cityName="San Diego" />
+      <VertiportStructure position={LA_POSITION} cityName="Los Angeles" />
       
       <Pipelines />
       <AircraftRenderer />

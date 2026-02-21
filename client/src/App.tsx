@@ -1,5 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { Suspense } from "react";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import "@fontsource/inter";
 import { Scene } from "./components/game/Scene";
 import { HUD } from "./components/game/HUD";
@@ -62,6 +63,14 @@ function App() {
         >
           <Suspense fallback={null}>
             <Scene />
+            <EffectComposer>
+              <Bloom
+                luminanceThreshold={0.7}
+                intensity={1.4}
+                mipmapBlur
+                radius={0.4}
+              />
+            </EffectComposer>
           </Suspense>
         </Canvas>
       </div>

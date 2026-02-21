@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import { useSimulation, RING_CONFIGS, OPERATOR_CONFIGS, type Aircraft as AircraftType } from "@/lib/stores/useSimulation";
+import { buildApproachCurve, clamp } from "@/lib/approachPath";
 
 const SD_POSITION: [number, number, number] = [-12, 0, 0];
 const LA_POSITION: [number, number, number] = [12, 0, 8];
@@ -22,33 +23,22 @@ const ROUTE_BASE_PATHS = {
   },
 };
 
-// Visual lane separation offsets for corridor variants
 const VARIANT_OFFSETS = {
   CENTER: { offset: 0, altitude: 0 },
   TOP: { offset: 0.5, altitude: 0.25 },
   BOTTOM: { offset: -0.5, altitude: -0.25 },
 };
 
-// Base altitudes in scene units (matching useSimulation CORRIDOR_ALTITUDES)
 const CORRIDOR_BASE_ALT = {
-  'N-S': (500 / 1250) * 2,  // 0.8
-  'E-W': (550 / 1250) * 2,  // 0.88
+  'N-S': (500 / 1250) * 2,
+  'E-W': (550 / 1250) * 2,
 };
-
-// ============================================================================
-// OPERATION VOLUME - RFI-Aligned Flight Data Display
-// Meridian Ring Structure: Ring 1 (150ft), Ring 2 (500ft), Ring 3 (1000ft)
-// Corridors: N-S (500/600ft), E-W (550/650ft)
-// ============================================================================
 
 function getOperatorCallsign(aircraft: AircraftType): string {
   const num = parseInt(aircraft.id.replace(/\D/g, '')) || 0;
   return `${aircraft.operator}-${String(num).padStart(3, '0')}`;
 }
 
-// Corridor Directional Altitude Separation (FAA RFI)
-// N-S: Northbound 500ft / Southbound 600ft (TOP=+100, BOTTOM=base)
-// E-W: Eastbound 550ft / Westbound 650ft (TOP=+100, BOTTOM=base)
 function getDisplayAltFt(aircraft: AircraftType): number {
   if (aircraft.status === 'landed') return 0;
   if (aircraft.status === 'in_ring') return RING_CONFIGS[aircraft.ringLevel].altitude;
@@ -94,55 +84,118 @@ function getPipelinePath(pipelineId: string) {
   return { start, end, control1, control2 };
 }
 
-const TRAIL_LENGTH = 15;
-const MAX_TRAIL_POSITIONS = 20;
+/** Dynamic point-light intensity per aircraft status */
+function getLightIntensity(status: AircraftType['status']): number {
+  switch (status) {
+    case 'descending':
+    case 'ascending':   return 1.0;
+    case 'in_pipeline': return 0.6;
+    case 'landed':      return 0.1;
+    default:            return 0.3;
+  }
+}
 
-function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
+const MAX_TRAIL_POSITIONS = 30;
+
+interface AircraftMeshProps {
+  aircraft: AircraftType;
+  gate: { angle: number; distance: number } | null;
+}
+
+function AircraftMesh({ aircraft, gate }: AircraftMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const groupRef = useRef<THREE.Group>(null);
+  const lightRef = useRef<THREE.PointLight>(null);
   const trailPositionsRef = useRef<THREE.Vector3[]>([]);
   const trailGeometryRef = useRef<THREE.BufferGeometry>(null);
-  
+
+  const cityPos: [number, number, number] = useMemo(() => {
+    if (aircraft.status === 'in_ring') {
+      return aircraft.cityId === "San Diego" ? SD_POSITION : LA_POSITION;
+    }
+    // descending/ascending/landed: use originCity
+    return (aircraft.cityId === "San Diego" || aircraft.originCity === "San Diego")
+      ? SD_POSITION : LA_POSITION;
+  }, [aircraft.status, aircraft.cityId, aircraft.originCity]);
+
+  /** Approach Bezier — built once per gate assignment */
+  const approachCurve = useMemo(() => {
+    if (!gate) return null;
+    const ringCfg = RING_CONFIGS[aircraft.ringLevel];
+    const ringAltScene = (ringCfg.altitude / 1250) * 2;
+    return buildApproachCurve(
+      cityPos,
+      gate.angle,
+      gate.distance,
+      ringCfg.radius,
+      ringAltScene
+    );
+  }, [gate, aircraft.ringLevel, cityPos]);
+
   const position = useMemo(() => {
-    if (aircraft.status === "in_ring" && aircraft.cityId) {
-      const cityPos = aircraft.cityId === "San Diego" ? SD_POSITION : LA_POSITION;
+    if (aircraft.status === "in_ring") {
       const angleRad = (aircraft.angleOnRing * Math.PI) / 180;
-      const x = cityPos[0] + Math.cos(angleRad) * aircraft.distanceFromCenter;
-      const z = cityPos[2] + Math.sin(angleRad) * aircraft.distanceFromCenter;
-      const y = cityPos[1] + (aircraft.altitude / 1250) * 2;
-      return new THREE.Vector3(x, y, z);
+      return new THREE.Vector3(
+        cityPos[0] + Math.cos(angleRad) * aircraft.distanceFromCenter,
+        cityPos[1] + (aircraft.altitude / 1250) * 2,
+        cityPos[2] + Math.sin(angleRad) * aircraft.distanceFromCenter
+      );
     }
-    
+
+    if (aircraft.status === "descending" && approachCurve) {
+      const ringAlt = RING_CONFIGS[aircraft.ringLevel].altitude;
+      const t = 1 - clamp(aircraft.altitude / ringAlt, 0, 1);
+      return approachCurve.getPointAt(t);
+    }
+
+    if (aircraft.status === "ascending" && approachCurve) {
+      const ringAlt = RING_CONFIGS[aircraft.ringLevel].altitude;
+      const t = clamp(aircraft.altitude / ringAlt, 0, 1);
+      return approachCurve.getPointAt(t);
+    }
+
+    // Fallback for descending/ascending without a known gate (legacy polar path)
     if (aircraft.status === "descending" || aircraft.status === "ascending" || aircraft.status === "landed") {
-      const cityPos = aircraft.cityId === "San Diego" ? SD_POSITION : 
-                      aircraft.originCity === "San Diego" ? SD_POSITION : LA_POSITION;
       const angleRad = (aircraft.angleOnRing * Math.PI) / 180;
-      const x = cityPos[0] + Math.cos(angleRad) * (aircraft.distanceFromCenter - 1);
-      const z = cityPos[2] + Math.sin(angleRad) * (aircraft.distanceFromCenter - 1);
-      const y = cityPos[1] + (aircraft.altitude / 1250) * 2;
-      return new THREE.Vector3(x, y, z);
+      return new THREE.Vector3(
+        cityPos[0] + Math.cos(angleRad) * (aircraft.distanceFromCenter - 1),
+        cityPos[1] + (aircraft.altitude / 1250) * 2,
+        cityPos[2] + Math.sin(angleRad) * (aircraft.distanceFromCenter - 1)
+      );
     }
-    
+
     if (aircraft.status === "in_pipeline" && aircraft.pipelineId) {
       const path = getPipelinePath(aircraft.pipelineId);
       if (path) {
         const curve = new THREE.CubicBezierCurve3(
-          path.start,
-          path.control1,
-          path.control2,
-          path.end
+          path.start, path.control1, path.control2, path.end
         );
         return curve.getPointAt(aircraft.pipelineProgress);
       }
     }
-    
+
     return new THREE.Vector3(0, 0, 0);
-  }, [aircraft]);
-  
+  }, [aircraft, approachCurve, cityPos]);
+
   const rotation = useMemo(() => {
     if (aircraft.status === "in_ring") {
       return new THREE.Euler(0, (aircraft.angleOnRing * Math.PI) / 180 + Math.PI / 2, 0);
     }
+
+    // For approach states, point nose along Bezier tangent
+    if ((aircraft.status === "descending" || aircraft.status === "ascending") && approachCurve) {
+      const ringAlt = RING_CONFIGS[aircraft.ringLevel].altitude;
+      const t = aircraft.status === "descending"
+        ? 1 - clamp(aircraft.altitude / ringAlt, 0.01, 0.99)
+        : clamp(aircraft.altitude / ringAlt, 0.01, 0.99);
+      const tangent = approachCurve.getTangentAt(t);
+      // For ascending, reverse the tangent so nose faces up the climb
+      const dir = aircraft.status === "ascending" ? tangent.negate() : tangent;
+      const pitch = Math.atan2(-dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z));
+      const yaw = Math.atan2(dir.x, dir.z);
+      return new THREE.Euler(pitch, yaw, 0);
+    }
+
     if (aircraft.status === "descending") {
       return new THREE.Euler(-Math.PI / 4, (aircraft.angleOnRing * Math.PI) / 180, 0);
     }
@@ -153,52 +206,77 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
       const path = getPipelinePath(aircraft.pipelineId);
       if (path) {
         const curve = new THREE.CubicBezierCurve3(
-          path.start,
-          path.control1,
-          path.control2,
-          path.end
+          path.start, path.control1, path.control2, path.end
         );
         const tangent = curve.getTangentAt(aircraft.pipelineProgress);
         return new THREE.Euler(0, Math.atan2(tangent.x, tangent.z), 0);
       }
     }
     return new THREE.Euler(0, 0, 0);
-  }, [aircraft]);
-  
-  useFrame(() => {
+  }, [aircraft, approachCurve]);
+
+  useFrame(({ clock }: { clock: { elapsedTime: number } }) => {
     if (groupRef.current) {
       groupRef.current.position.copy(position);
       groupRef.current.rotation.copy(rotation);
+
+      // Landed aircraft: slow hover bob
+      if (aircraft.status === 'landed') {
+        groupRef.current.position.y += Math.sin(clock.elapsedTime * 1.5) * 0.04;
+      }
     }
-    
+
+    // Dynamic light intensity
+    if (lightRef.current) {
+      lightRef.current.intensity = getLightIntensity(aircraft.status);
+    }
+
+    // Trail update — keep last MAX_TRAIL_POSITIONS positions
     if (trailPositionsRef.current.length >= MAX_TRAIL_POSITIONS) {
       trailPositionsRef.current.shift();
     }
     trailPositionsRef.current.push(position.clone());
-    
+
     if (trailGeometryRef.current && trailPositionsRef.current.length > 1) {
-      const positions = new Float32Array(trailPositionsRef.current.length * 3);
+      const count = trailPositionsRef.current.length;
+      const positions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+
+      // Determine trail color
+      let r = 0, g = 0, b = 0;
+      if (aircraft.status === 'descending') { r = 0; g = 1; b = 0; }
+      else if (aircraft.status === 'ascending') { r = 1; g = 1; b = 0; }
+      else if (aircraft.status === 'in_pipeline') { r = 1; g = 0.53; b = 0; }
+      else {
+        const hex = aircraft.color;
+        r = ((hex >> 16) & 0xff) / 255;
+        g = ((hex >> 8) & 0xff) / 255;
+        b = (hex & 0xff) / 255;
+      }
+
       trailPositionsRef.current.forEach((pos, i) => {
         positions[i * 3] = pos.x;
         positions[i * 3 + 1] = pos.y;
         positions[i * 3 + 2] = pos.z;
+        // Fade: index 0 = tail (transparent), index count-1 = head (bright)
+        const alpha = i / (count - 1);
+        colors[i * 3] = r * alpha;
+        colors[i * 3 + 1] = g * alpha;
+        colors[i * 3 + 2] = b * alpha;
       });
+
       trailGeometryRef.current.setAttribute(
         "position",
         new THREE.BufferAttribute(positions, 3)
       );
-      trailGeometryRef.current.setDrawRange(0, trailPositionsRef.current.length);
+      trailGeometryRef.current.setAttribute(
+        "color",
+        new THREE.BufferAttribute(colors, 3)
+      );
+      trailGeometryRef.current.setDrawRange(0, count);
     }
   });
-  
-  const trailColor = useMemo(() => {
-    if (aircraft.status === "descending") return 0x00ff00;
-    if (aircraft.status === "ascending") return 0xffff00;
-    if (aircraft.status === "in_pipeline") return 0xff8800;
-    return aircraft.color;
-  }, [aircraft.status, aircraft.color]);
 
-  // Flight Data Block - Operation Volume ticker
   const callsign = useMemo(() => getOperatorCallsign(aircraft), [aircraft.id, aircraft.operator]);
   const opColor = OPERATOR_CONFIGS[aircraft.operator].hex;
   const altFt = getDisplayAltFt(aircraft);
@@ -206,11 +284,11 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
   const opVolume = getOpVolume(aircraft);
   const tickerBorder = useMemo(() => {
     switch (aircraft.status) {
-      case 'in_ring': return opColor;
+      case 'in_ring':     return opColor;
       case 'in_pipeline': return '#ffaa00';
-      case 'descending': return '#00ff88';
-      case 'ascending': return '#ffff00';
-      default: return '#666';
+      case 'descending':  return '#00ff88';
+      case 'ascending':   return '#ffff00';
+      default:            return '#666';
     }
   }, [aircraft.status, opColor]);
 
@@ -222,17 +300,17 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
           <meshStandardMaterial
             color={aircraft.color}
             emissive={aircraft.color}
-            emissiveIntensity={0.3}
+            emissiveIntensity={0.4}
           />
         </mesh>
 
         <pointLight
+          ref={lightRef}
           color={aircraft.color}
-          intensity={0.3}
-          distance={1}
+          intensity={getLightIntensity(aircraft.status)}
+          distance={1.5}
         />
 
-        {/* Flight Data Block - ATC-style ticker */}
         {aircraft.status !== 'landed' && (
           <Html
             position={[0, 0.5, 0]}
@@ -261,7 +339,8 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
           </Html>
         )}
       </group>
-      
+
+      {/* Gradient trail */}
       <line>
         <bufferGeometry ref={trailGeometryRef}>
           <bufferAttribute
@@ -270,13 +349,14 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
             array={new Float32Array(MAX_TRAIL_POSITIONS * 3)}
             itemSize={3}
           />
+          <bufferAttribute
+            attach="attributes-color"
+            count={MAX_TRAIL_POSITIONS}
+            array={new Float32Array(MAX_TRAIL_POSITIONS * 3)}
+            itemSize={3}
+          />
         </bufferGeometry>
-        <lineBasicMaterial
-          color={trailColor}
-          transparent
-          opacity={0.4}
-          linewidth={1}
-        />
+        <lineBasicMaterial vertexColors transparent opacity={0.85} linewidth={1} />
       </line>
     </>
   );
@@ -284,12 +364,22 @@ function AircraftMesh({ aircraft }: { aircraft: AircraftType }) {
 
 export function AircraftRenderer() {
   const aircraft = useSimulation((state) => state.aircraft);
-  
+  const gates = useSimulation((state) => state.gates);
+
   return (
     <group>
-      {aircraft.map((ac) => (
-        <AircraftMesh key={ac.id} aircraft={ac} />
-      ))}
+      {aircraft.map((ac) => {
+        const gate = ac.targetGate
+          ? (gates.find((g) => g.id === ac.targetGate) ?? null)
+          : null;
+        return (
+          <AircraftMesh
+            key={ac.id}
+            aircraft={ac}
+            gate={gate ? { angle: gate.angle, distance: gate.distance } : null}
+          />
+        );
+      })}
     </group>
   );
 }

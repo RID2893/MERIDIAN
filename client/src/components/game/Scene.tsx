@@ -4,6 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import { OrbitControls, Grid, Text } from "@react-three/drei";
 import { CityRing } from "./CityRing";
 import { AircraftRenderer } from "./Aircraft";
+import { ApproachCorridors } from "./ApproachCorridors";
 import { Pipelines } from "./Pipeline";
 import { WeatherEffects } from "./Weather";
 import { useSimulation, RING_CONFIGS, type Aircraft } from "@/lib/stores/useSimulation";
@@ -302,6 +303,9 @@ export function Scene() {
       
       <Pipelines />
       <AircraftRenderer />
+
+      {/* ILS approach corridor tubes for descending/ascending aircraft */}
+      <ApproachCorridors />
 
       {/* Safety alert lines between close aircraft */}
       <ConflictAlerts />

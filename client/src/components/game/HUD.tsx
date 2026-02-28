@@ -97,7 +97,7 @@ function CapacityWarnings() {
       warnings.push({ id: `pipeline-${p.id}`, message: `${p.id} Pipeline ${utilization.toFixed(0)}% capacity`, severity: "warning" });
   });
 
-  ["San Diego", "Los Angeles"].forEach((city) => {
+  ["San Diego", "Orange County"].forEach((city) => {
     const cityGates = gates.filter((g) => g.cityId === city);
     const occupiedPercent = (cityGates.filter((g) => g.status === "RED").length / cityGates.length) * 100;
     const congestedGates = cityGates.filter((g) => g.status === "YELLOW").length;
@@ -249,6 +249,8 @@ function getBarColor(pct: number) {
 function AirspaceTab() {
   const aircraft = useSimulation((state) => state.aircraft);
   const pipelines = useSimulation((state) => state.pipelines);
+  const centerPipelineUtilizationPct = useSimulation((state) => state.centerPipelineUtilizationPct);
+  const topPipelineOverflowActive = useSimulation((state) => state.topPipelineOverflowActive);
 
   const ringCounts = (city: string) =>
     ([1, 2, 3] as RingLevel[]).map((r) => ({
@@ -258,7 +260,7 @@ function AirspaceTab() {
     }));
 
   const sdRings = ringCounts("San Diego");
-  const laRings = ringCounts("Los Angeles");
+  const laRings = ringCounts("Orange County");
   const nsPipelines = pipelines.filter((p) => p.id.startsWith("N-S"));
   const ewPipelines = pipelines.filter((p) => p.id.startsWith("E-W"));
   const nsCount = nsPipelines.reduce((s, p) => s + p.currentCount, 0);
@@ -288,12 +290,28 @@ function AirspaceTab() {
       <Section label="SAN DIEGO — Ring Occupancy">
         {sdRings.map((r) => <RingBar key={`sd-${r.ring}`} ring={r.ring} count={r.count} capacity={r.capacity} />)}
       </Section>
-      <Section label="LOS ANGELES — Ring Occupancy">
-        {laRings.map((r) => <RingBar key={`la-${r.ring}`} ring={r.ring} count={r.count} capacity={r.capacity} />)}
+      <Section label="ORANGE COUNTY — Ring Occupancy">
+        {laRings.map((r) => <RingBar key={`oc-${r.ring}`} ring={r.ring} count={r.count} capacity={r.capacity} />)}
       </Section>
       <Section label="CORRIDOR THROUGHPUT">
         <PipelineRow label="N-S Corridor" count={nsCount} cap={CORRIDOR_THROUGHPUT["N-S"]} />
         <PipelineRow label="E-W Corridor" count={ewCount} cap={CORRIDOR_THROUGHPUT["E-W"]} />
+        {/* CENTER pipeline utilization + overflow badge */}
+        <div style={{ marginTop: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ color: "#888", fontSize: "9px", fontFamily: "'Orbitron', monospace" }}>
+            CENTER PIPELINE: {centerPipelineUtilizationPct}%
+          </span>
+          {topPipelineOverflowActive && (
+            <span style={{
+              background: "rgba(255,170,0,0.2)", border: "1px solid #ffaa00",
+              color: "#ffcc00", padding: "1px 7px", borderRadius: "3px",
+              fontSize: "8px", fontFamily: "'Orbitron', monospace",
+              animation: "pulse 1s infinite",
+            }}>
+              OVERFLOW ACTIVE
+            </span>
+          )}
+        </div>
       </Section>
       <Section label="FLEET MIX">
         {(Object.keys(OPERATOR_CONFIGS) as OperatorCode[]).map((op) => {
@@ -350,7 +368,7 @@ function OpsTab() {
   const inPipeline = aircraft.filter((a) => a.status === "in_pipeline").length;
 
   const sdGates = gates.filter((g) => g.cityId === "San Diego");
-  const laGates = gates.filter((g) => g.cityId === "Los Angeles");
+  const laGates = gates.filter((g) => g.cityId === "Orange County");
   const sdUtil = (sdGates.filter((g) => g.status === "RED").length / sdGates.length) * 100;
   const laUtil = (laGates.filter((g) => g.status === "RED").length / laGates.length) * 100;
 
@@ -386,7 +404,7 @@ function OpsTab() {
                   </span>
                 </div>
                 <div style={{ color: "#aaa", fontSize: "10px", marginBottom: "2px" }}>
-                  {req.origin === "San Diego" ? "SD" : "LA"} → {req.destination === "San Diego" ? "SD" : "LA"}
+                  {req.origin === "San Diego" ? "SD" : "OC"} → {req.destination === "San Diego" ? "SD" : "OC"}
                 </div>
                 <div style={{ color: "#777", fontSize: "9px", marginBottom: "6px" }}>{req.reason}</div>
                 <div style={{ display: "flex", gap: "6px" }}>
@@ -410,7 +428,7 @@ function OpsTab() {
 
       <Section label="GATE UTILIZATION">
         <UtilBar label="San Diego" pct={sdUtil} />
-        <UtilBar label="Los Angeles" pct={laUtil} />
+        <UtilBar label="Orange County" pct={laUtil} />
       </Section>
 
       <Section label="CUMULATIVE STATS">
@@ -522,7 +540,7 @@ function FinanceTab() {
       <Section label="CITY REVENUE" accentColor="#ffaa00">
         {Object.entries(revenue.byCity).map(([city, amount]) => (
           <div key={city} style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
-            <span style={{ color: "#fff", fontSize: "10px" }}>{city === "San Diego" ? "SD" : "LA"}</span>
+            <span style={{ color: "#fff", fontSize: "10px" }}>{city === "San Diego" ? "SD" : "OC"}</span>
             <span style={{ color: "#ffaa00", fontSize: "10px", fontFamily: "'Courier New', monospace" }}>{fmt(amount)}</span>
           </div>
         ))}
@@ -530,6 +548,20 @@ function FinanceTab() {
 
       {/* Blockchain Ledger with expandable rows */}
       <Section label={`BLOCKCHAIN LEDGER (${blockchain.length} txns)`} accentColor="#aa66ff">
+        {/* SIMULATED LEDGER disclaimer badge */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          marginBottom: "8px",
+        }}>
+          <span style={{ color: "#666", fontSize: "8px" }}>Algorand-compatible hash format</span>
+          <span style={{
+            background: "rgba(255,200,0,0.15)", border: "1px solid #ffcc0066",
+            color: "#ffcc00", padding: "1px 7px", borderRadius: "3px",
+            fontSize: "8px", fontFamily: "'Orbitron', monospace", letterSpacing: "0.5px",
+          }}>
+            SIMULATED LEDGER
+          </span>
+        </div>
         {blockchain.length === 0 ? (
           <div style={{ color: "#666", fontSize: "10px" }}>No transactions yet — start simulation</div>
         ) : (
@@ -564,7 +596,7 @@ function FinanceTab() {
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <span style={{ color: "#00ff88", fontSize: "9px", fontFamily: "'Courier New', monospace", fontWeight: "bold" }}>
-                        ${tx.amount}
+                        ${tx.amount.toFixed(2)}
                       </span>
                       <span style={{ color: "#555", fontSize: "9px" }}>{isExpanded ? "▲" : "▼"}</span>
                     </div>
@@ -575,9 +607,25 @@ function FinanceTab() {
                     <div style={{ marginTop: "8px", borderTop: "1px solid #aa66ff33", paddingTop: "8px" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 12px", marginBottom: "6px" }}>
                         <Detail label="Type" value={getTypeFull(tx.type)} />
-                        <Detail label="City" value={tx.city === "San Diego" ? "SD" : "LA"} />
+                        <Detail label="City" value={tx.city === "San Diego" ? "SD" : "OC"} />
                         <Detail label="Operator" value={tx.operator} valueColor={OPERATOR_CONFIGS[tx.operator].hex} />
                         <Detail label="Aircraft" value={tx.aircraftId} />
+                      </div>
+                      {/* Dynamic pricing breakdown */}
+                      <div style={{ background: "rgba(0,255,136,0.05)", borderRadius: "3px", padding: "6px", marginBottom: "6px", border: "1px solid #00ff8822" }}>
+                        <div style={{ color: "#777", fontSize: "8px", marginBottom: "4px" }}>FARE CALCULATION</div>
+                        <div style={{ color: "#888", fontSize: "8px", fontFamily: "'Courier New', monospace", marginBottom: "2px" }}>
+                          <span style={{ color: "#aaa" }}>${(tx.baseFare ?? 155).toFixed(2)}</span>
+                          <span style={{ color: "#666" }}> base + </span>
+                          <span style={{ color: "#aaa" }}>${(tx.energySurcharge ?? 2.25).toFixed(2)}</span>
+                          <span style={{ color: "#666" }}> energy</span>
+                        </div>
+                        <div style={{ color: "#888", fontSize: "8px", fontFamily: "'Courier New', monospace", marginBottom: "4px" }}>
+                          <span style={{ color: "#666" }}>× </span>
+                          <span style={{ color: "#ffcc00" }}>{(tx.demandMultiplier ?? 1.0).toFixed(2)}x</span>
+                          <span style={{ color: "#666" }}> demand = </span>
+                          <span style={{ color: "#00ff88", fontWeight: "bold" }}>${tx.amount.toFixed(2)}</span>
+                        </div>
                       </div>
                       {/* Revenue split */}
                       <div style={{ background: "rgba(0,0,0,0.4)", borderRadius: "3px", padding: "6px", marginBottom: "6px" }}>

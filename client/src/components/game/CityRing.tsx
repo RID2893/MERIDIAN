@@ -208,7 +208,7 @@ export function CityRing({ cityId, position }: CityRingProps) {
       
       {/* City Name */}
       <Text position={[0, 0.1, 0]} fontSize={0.8} color={0x00ffff} anchorX="center" anchorY="middle" outlineWidth={0.03} outlineColor={0x000000}>
-        {cityId === "San Diego" ? "SAN DIEGO" : "LOS ANGELES"}
+        {cityId === "San Diego" ? "SAN DIEGO" : "ORANGE COUNTY"}
       </Text>
       
       {/* Quadrant Dividers */}

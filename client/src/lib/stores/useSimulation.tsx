@@ -7,7 +7,7 @@ import { useWeather } from "./useWeather";
 
 export type AircraftStatus = "in_ring" | "descending" | "landed" | "in_pipeline" | "ascending";
 export type GateStatus = "GREEN" | "YELLOW" | "RED";
-export type CityName = "San Diego" | "Los Angeles";
+export type CityName = "San Diego" | "Orange County";
 export type QuadrantName = "North" | "East" | "South" | "West";
 export type PipelineVariant = "CENTER" | "TOP" | "BOTTOM";
 export type PipelineName = "N-S-CENTER" | "N-S-TOP" | "N-S-BOTTOM" | "E-W-CENTER" | "E-W-TOP" | "E-W-BOTTOM";
@@ -87,8 +87,8 @@ export const SCENARIO_CONFIGS: Record<ScenarioName, ScenarioConfig> = {
     pipelineCapacity: 20,
     disabledGates: ["San Diego-NQ-01", "San Diego-NQ-02", "San Diego-NQ-03", "San Diego-NQ-04",
                     "San Diego-EQ-01", "San Diego-EQ-02", "San Diego-EQ-03", "San Diego-EQ-04",
-                    "Los Angeles-SQ-01", "Los Angeles-SQ-02", "Los Angeles-SQ-03", "Los Angeles-SQ-04",
-                    "Los Angeles-WQ-01", "Los Angeles-WQ-02", "Los Angeles-WQ-03", "Los Angeles-WQ-04"],
+                    "Orange County-SQ-01", "Orange County-SQ-02", "Orange County-SQ-03", "Orange County-SQ-04",
+                    "Orange County-WQ-01", "Orange County-WQ-02", "Orange County-WQ-03", "Orange County-WQ-04"],
     alertMessage: "MAINTENANCE: 16 gates offline for scheduled maintenance",
   },
   emergency: {
@@ -171,7 +171,23 @@ export interface FlightRequest {
 
 // Revenue split model: 70% operator / 20% AAM Institute / 10% city
 export const REVENUE_SPLIT = { operator: 0.70, aam: 0.20, city: 0.10 };
-export const LANDING_FEE = 85; // $ per landing/departure operation
+// Dynamic pricing model per FAA RFI documents
+export const BASE_FARE = 155;       // $ base fare per operation
+export const ENERGY_SURCHARGE = 2.25; // $ per operation (energy cost pass-through)
+export const DEMAND_MULTIPLIERS: Record<ScenarioName, number> = {
+  normal: 1.00,     // $157.25 per flight
+  rush_hour: 1.77,  // $278.33 per flight (peak)
+  maintenance: 0.65, // $102.21 per flight (reduced demand)
+  emergency: 1.50,  // $235.88 per flight
+};
+/** Returns the dynamic fare for current scenario */
+export function calculateFare(scenario: ScenarioName): {
+  baseFare: number; energySurcharge: number; demandMultiplier: number; total: number;
+} {
+  const multiplier = DEMAND_MULTIPLIERS[scenario] ?? 1.0;
+  const total = (BASE_FARE + ENERGY_SURCHARGE) * multiplier;
+  return { baseFare: BASE_FARE, energySurcharge: ENERGY_SURCHARGE, demandMultiplier: multiplier, total };
+}
 
 export interface RevenueRecord {
   totalRevenue: number;
@@ -194,6 +210,10 @@ export interface BlockchainTransaction {
   cityPay: number;
   aircraftId: string;
   blockHash: string;
+  // Dynamic pricing breakdown (Sprint 7 — FAA RFI alignment)
+  baseFare: number;
+  energySurcharge: number;
+  demandMultiplier: number;
 }
 
 export interface StatisticsSnapshot {
@@ -236,6 +256,10 @@ export interface SimulationState {
   // Revenue & blockchain
   revenue: RevenueRecord;
   blockchain: BlockchainTransaction[];
+
+  // Pipeline overflow tracking (CENTER >85% utilization triggers TOP overflow)
+  centerPipelineUtilizationPct: number;  // 0–100
+  topPipelineOverflowActive: boolean;
 
   play: () => void;
   pause: () => void;
@@ -340,7 +364,7 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
     aircraft.push({
       id: `AC-${String(id++).padStart(3, "0")}`,
       status: "in_ring",
-      cityId: "Los Angeles",
+      cityId: "Orange County",
       pipelineId: null,
       angleOnRing: Math.random() * 360,
       distanceFromCenter: rc.radius,
@@ -350,7 +374,7 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
       color: OPERATOR_CONFIGS[op].color,
       speed: 0.5 + Math.random() * 0.3,
       descentStartTime: null,
-      originCity: "Los Angeles",
+      originCity: "Orange County",
       ringLevel: ring,
       operator: op,
     });
@@ -429,7 +453,7 @@ function createPipelines(config: ScenarioConfig = SCENARIO_CONFIGS.normal): Pipe
     pipelines.push({
       id: `N-S-${variant}` as PipelineName,
       fromCity: "San Diego",
-      toCity: "Los Angeles",
+      toCity: "Orange County",
       fromQuadrant: "North",
       toQuadrant: "North",
       variant,
@@ -445,7 +469,7 @@ function createPipelines(config: ScenarioConfig = SCENARIO_CONFIGS.normal): Pipe
     pipelines.push({
       id: `E-W-${variant}` as PipelineName,
       fromCity: "San Diego",
-      toCity: "Los Angeles",
+      toCity: "Orange County",
       fromQuadrant: "East",
       toQuadrant: "West",
       variant,
@@ -464,7 +488,7 @@ const defaultConfig = SCENARIO_CONFIGS.normal;
 
 const citiesConfig = [
   { name: "San Diego", position: { x: -12, y: 0, z: 0 }, gateCount: 112 },
-  { name: "Los Angeles", position: { x: 12, y: 0, z: 8 }, gateCount: 112 }
+  { name: "Orange County", position: { x: 12, y: 0, z: 8 }, gateCount: 112 }
 ];
 
 function generateBlockHash(): string {
@@ -483,7 +507,7 @@ export const useSimulation = create<SimulationState>()(
     speed: 1,
     simulationTime: new Date(),
     aircraft: createInitialAircraft(defaultConfig),
-    gates: [...createGates("San Diego", defaultConfig.disabledGates), ...createGates("Los Angeles", defaultConfig.disabledGates)],
+    gates: [...createGates("San Diego", defaultConfig.disabledGates), ...createGates("Orange County", defaultConfig.disabledGates)],
     pipelines: createPipelines(defaultConfig),
     events: [],
     selectedScenario: "normal",
@@ -508,9 +532,11 @@ export const useSimulation = create<SimulationState>()(
       aamShare: 0,
       cityShare: 0,
       byOperator: { AR: 0, JB: 0, WK: 0, BT: 0, LL: 0, VL: 0 },
-      byCity: { 'San Diego': 0, 'Los Angeles': 0 },
+      byCity: { 'San Diego': 0, 'Orange County': 0 },
     },
     blockchain: [],
+    centerPipelineUtilizationPct: 0,
+    topPipelineOverflowActive: false,
 
     play: () => {
       set({ isPlaying: true });
@@ -530,7 +556,7 @@ export const useSimulation = create<SimulationState>()(
         speed: 1,
         simulationTime: new Date(),
         aircraft: createInitialAircraft(config),
-        gates: [...createGates("San Diego", config.disabledGates), ...createGates("Los Angeles", config.disabledGates)],
+        gates: [...createGates("San Diego", config.disabledGates), ...createGates("Orange County", config.disabledGates)],
         pipelines: createPipelines(config),
         events: [],
         statistics: [],
@@ -548,9 +574,11 @@ export const useSimulation = create<SimulationState>()(
         revenue: {
           totalRevenue: 0, operatorShare: 0, aamShare: 0, cityShare: 0,
           byOperator: { AR: 0, JB: 0, WK: 0, BT: 0, LL: 0, VL: 0 },
-          byCity: { 'San Diego': 0, 'Los Angeles': 0 },
+          byCity: { 'San Diego': 0, 'Orange County': 0 },
         },
         blockchain: [],
+        centerPipelineUtilizationPct: 0,
+        topPipelineOverflowActive: false,
       });
     },
 
@@ -566,7 +594,7 @@ export const useSimulation = create<SimulationState>()(
         isPlaying: false,
         simulationTime: new Date(),
         aircraft: createInitialAircraft(config),
-        gates: [...createGates("San Diego", config.disabledGates), ...createGates("Los Angeles", config.disabledGates)],
+        gates: [...createGates("San Diego", config.disabledGates), ...createGates("Orange County", config.disabledGates)],
         pipelines: createPipelines(config),
         events: [],
         selectedGateId: null,
@@ -585,9 +613,11 @@ export const useSimulation = create<SimulationState>()(
         revenue: {
           totalRevenue: 0, operatorShare: 0, aamShare: 0, cityShare: 0,
           byOperator: { AR: 0, JB: 0, WK: 0, BT: 0, LL: 0, VL: 0 },
-          byCity: { 'San Diego': 0, 'Los Angeles': 0 },
+          byCity: { 'San Diego': 0, 'Orange County': 0 },
         },
         blockchain: [],
+        centerPipelineUtilizationPct: 0,
+        topPipelineOverflowActive: false,
       });
       get().addEvent(`Scenario changed to: ${config.name}`, "info");
       if (config.alertMessage) {
@@ -701,9 +731,9 @@ export const useSimulation = create<SimulationState>()(
 
       // Generate flight queue entries when grounded
       if (isWeatherGrounded && Math.random() < 0.02 * deltaTime) {
-        const cities: CityName[] = ["San Diego", "Los Angeles"];
+        const cities: CityName[] = ["San Diego", "Orange County"];
         const origin = cities[Math.floor(Math.random() * 2)];
-        const dest = origin === "San Diego" ? "Los Angeles" : "San Diego";
+        const dest = origin === "San Diego" ? "Orange County" : "San Diego";
         const op = OPERATOR_CODES[Math.floor(Math.random() * OPERATOR_CODES.length)];
         const req: FlightRequest = {
           id: `FRQ-${Date.now().toString().slice(-5)}`,
@@ -790,6 +820,7 @@ export const useSimulation = create<SimulationState>()(
 
       const scenarioConfig = SCENARIO_CONFIGS[state.selectedScenario as ScenarioName] || defaultConfig;
       const adjustedDelta = deltaTime * state.speed * weatherSpeedFactor;
+      const currentFare = calculateFare(state.selectedScenario as ScenarioName);
       const newEvents: { message: string; type: "info" | "warning" | "success" | "error" }[] = [];
       
       const reservedGates = new Set<string>();
@@ -942,12 +973,15 @@ export const useSimulation = create<SimulationState>()(
                 type: 'LANDING_FEE',
                 operator: aircraft.operator,
                 city: landCity as CityName,
-                amount: LANDING_FEE,
-                operatorPay: LANDING_FEE * REVENUE_SPLIT.operator,
-                aamPay: LANDING_FEE * REVENUE_SPLIT.aam,
-                cityPay: LANDING_FEE * REVENUE_SPLIT.city,
+                amount: currentFare.total,
+                operatorPay: currentFare.total * REVENUE_SPLIT.operator,
+                aamPay: currentFare.total * REVENUE_SPLIT.aam,
+                cityPay: currentFare.total * REVENUE_SPLIT.city,
                 aircraftId: aircraft.id,
                 blockHash: generateBlockHash(),
+                baseFare: currentFare.baseFare,
+                energySurcharge: currentFare.energySurcharge,
+                demandMultiplier: currentFare.demandMultiplier,
               });
               updatedAircraft.push({
                 ...aircraft,
@@ -990,12 +1024,15 @@ export const useSimulation = create<SimulationState>()(
                 type: 'DEPARTURE_FEE',
                 operator: aircraft.operator,
                 city: depCity as CityName,
-                amount: LANDING_FEE,
-                operatorPay: LANDING_FEE * REVENUE_SPLIT.operator,
-                aamPay: LANDING_FEE * REVENUE_SPLIT.aam,
-                cityPay: LANDING_FEE * REVENUE_SPLIT.city,
+                amount: currentFare.total,
+                operatorPay: currentFare.total * REVENUE_SPLIT.operator,
+                aamPay: currentFare.total * REVENUE_SPLIT.aam,
+                cityPay: currentFare.total * REVENUE_SPLIT.city,
                 aircraftId: aircraft.id,
                 blockHash: generateBlockHash(),
+                baseFare: currentFare.baseFare,
+                energySurcharge: currentFare.energySurcharge,
+                demandMultiplier: currentFare.demandMultiplier,
               });
               updatedAircraft.push({
                 ...aircraft,
@@ -1159,6 +1196,15 @@ export const useSimulation = create<SimulationState>()(
           },
           revenue: updatedRevenue,
           blockchain: [...newTransactions, ...prevState.blockchain].slice(0, 50),
+          ...(() => {
+            // Pipeline overflow: compute CENTER pipeline utilization
+            const centerPipelines = updatedPipelines.filter(p => p.id.includes('CENTER'));
+            if (centerPipelines.length === 0) return { centerPipelineUtilizationPct: 0, topPipelineOverflowActive: false };
+            const centerAircraftCount = updatedAircraft.filter(a => centerPipelines.some(p => p.id === a.pipelineId)).length;
+            const centerCapacity = centerPipelines.reduce((sum, p) => sum + p.capacity, 0);
+            const pct = centerCapacity > 0 ? Math.round((centerAircraftCount / centerCapacity) * 100) : 0;
+            return { centerPipelineUtilizationPct: pct, topPipelineOverflowActive: pct >= 85 };
+          })(),
         };
       });
     },

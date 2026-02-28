@@ -118,7 +118,7 @@ interface ConflictPair {
 function getAircraftPosition(ac: Aircraft): THREE.Vector3 | null {
   if (ac.status === 'landed') return null;
   const cityPos = ac.cityId === "San Diego" ? SD_POSITION :
-                  ac.cityId === "Los Angeles" ? LA_POSITION :
+                  ac.cityId === "Orange County" ? LA_POSITION :
                   ac.originCity === "San Diego" ? SD_POSITION : LA_POSITION;
   if (ac.status === 'in_ring' || ac.status === 'descending' || ac.status === 'ascending') {
     const angleRad = (ac.angleOnRing * Math.PI) / 180;
@@ -295,11 +295,11 @@ export function Scene() {
       <GroundPlane />
       
       <CityRing cityId="San Diego" position={SD_POSITION} />
-      <CityRing cityId="Los Angeles" position={LA_POSITION} />
+      <CityRing cityId="Orange County" position={LA_POSITION} />
 
       {/* Vertiport landing infrastructure at city centers */}
       <VertiportStructure position={SD_POSITION} cityName="San Diego" />
-      <VertiportStructure position={LA_POSITION} cityName="Los Angeles" />
+      <VertiportStructure position={LA_POSITION} cityName="Orange County" />
       
       <Pipelines />
       <AircraftRenderer />

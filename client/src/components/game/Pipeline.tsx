@@ -7,33 +7,42 @@ import { Text } from "@react-three/drei";
 const SD_POSITION: [number, number, number] = [-12, 0, 0];
 const LA_POSITION: [number, number, number] = [12, 0, 8];
 
+// Pipelines connect at Ring 3 (Regional, radius=9) — not the local gate ring (radius=6)
+// SD center: (-12,0,0)  |  OC center: (12,0,8)
+// N-S exits: north face of Ring 3 at each city
+// E-W exits: east face of SD Ring 3 → west face of OC Ring 3
+const RING3_RADIUS = 9;
+
 const ROUTE_CONFIGS = {
   "N-S": {
-    baseStart: new THREE.Vector3(SD_POSITION[0], 0, SD_POSITION[2] - 6),
-    baseEnd: new THREE.Vector3(LA_POSITION[0], 0, LA_POSITION[2] - 6),
-    control1: new THREE.Vector3(-4, 0, -3),
-    control2: new THREE.Vector3(4, 0, 5),
+    // SD Ring 3 north face → OC Ring 3 north face (both on north side, z decreasing)
+    baseStart: new THREE.Vector3(SD_POSITION[0], 0, SD_POSITION[2] - RING3_RADIUS),
+    baseEnd:   new THREE.Vector3(LA_POSITION[0], 0, LA_POSITION[2] - RING3_RADIUS),
+    control1:  new THREE.Vector3(-4, 0, -6),
+    control2:  new THREE.Vector3(4, 0, -4),
   },
   "E-W": {
-    baseStart: new THREE.Vector3(SD_POSITION[0] + 6, 0, SD_POSITION[2]),
-    baseEnd: new THREE.Vector3(LA_POSITION[0] - 6, 0, LA_POSITION[2]),
-    control1: new THREE.Vector3(-2, 0, 2),
-    control2: new THREE.Vector3(8, 0, 6),
+    // SD Ring 3 east face → OC Ring 3 west face (threading through the gap between cities)
+    baseStart: new THREE.Vector3(SD_POSITION[0] + RING3_RADIUS, 0, SD_POSITION[2]),
+    baseEnd:   new THREE.Vector3(LA_POSITION[0] - RING3_RADIUS, 0, LA_POSITION[2]),
+    control1:  new THREE.Vector3(-1, 0, 3),
+    control2:  new THREE.Vector3(1, 0, 5),
   },
 };
 
-// Corridor base altitudes in scene units (FAA RFI directional separation)
-// N-S: 500ft base → (500/1250)*2 = 0.8 scene units
-// E-W: 550ft base → (550/1250)*2 = 0.88 scene units
-const CORRIDOR_BASE_ALT: Record<string, number> = {
-  'N-S': (500 / 1250) * 2,
-  'E-W': (550 / 1250) * 2,
+// Document-aligned pipeline altitudes (FAA RFI Section 3.2 — inter-city corridor tiers)
+// BOTTOM = 1000ft (base tier)  |  CENTER = 1500ft (primary)  |  TOP = 2000ft (overflow)
+const VARIANT_ALTITUDES: Record<string, number> = {
+  BOTTOM: (1000 / 1250) * 2,   // 1.6 scene units
+  CENTER: (1500 / 1250) * 2,   // 2.4 scene units
+  TOP:    (2000 / 1250) * 2,   // 3.2 scene units
 };
 
-const VARIANT_OFFSETS = {
-  CENTER: { offset: 0, altOffset: 0 },
-  TOP: { offset: 0.5, altOffset: 0.25 },
-  BOTTOM: { offset: -0.5, altOffset: -0.25 },
+// Lateral (Z-axis) separation between the three parallel tubes — widened for visual clarity
+const VARIANT_LATERAL: Record<string, number> = {
+  CENTER:  0,
+  TOP:    +1.2,
+  BOTTOM: -1.2,
 };
 
 function FlowParticles({ curve, color }: { curve: THREE.CubicBezierCurve3; color: number }) {
@@ -99,25 +108,26 @@ interface PipelineVariantProps {
   color: number;
 }
 
+const VARIANT_ALT_LABELS: Record<string, string> = {
+  BOTTOM: '1000ft', CENTER: '1500ft', TOP: '2000ft',
+};
+
 function PipelineVariantRoute({ routeId, variant, color }: PipelineVariantProps) {
   const routeConfig = ROUTE_CONFIGS[routeId as keyof typeof ROUTE_CONFIGS];
-  const variantOffset = VARIANT_OFFSETS[variant];
   
   const pipeline = useSimulation((state) =>
     state.pipelines.find((p) => p.id === `${routeId}-${variant}`)
   );
   
   const curve = useMemo(() => {
-    const offsetAmount = variantOffset.offset;
-    const baseAlt = CORRIDOR_BASE_ALT[routeId] || 0.8;
-    const totalAlt = baseAlt + variantOffset.altOffset;
-    const start = routeConfig.baseStart.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount));
-    const end = routeConfig.baseEnd.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount));
-    const ctrl1 = routeConfig.control1.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount * 0.5));
-    const ctrl2 = routeConfig.control2.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount * 0.5));
-
+    const alt = VARIANT_ALTITUDES[variant] ?? 2.4;
+    const lat = VARIANT_LATERAL[variant] ?? 0;
+    const start = routeConfig.baseStart.clone().add(new THREE.Vector3(0, alt, lat));
+    const end   = routeConfig.baseEnd.clone().add(new THREE.Vector3(0, alt, lat));
+    const ctrl1 = routeConfig.control1.clone().add(new THREE.Vector3(0, alt, lat * 0.5));
+    const ctrl2 = routeConfig.control2.clone().add(new THREE.Vector3(0, alt, lat * 0.5));
     return new THREE.CubicBezierCurve3(start, ctrl1, ctrl2, end);
-  }, [routeConfig, variantOffset, routeId]);
+  }, [routeConfig, variant]);
   
   const tubeGeometry = useMemo(() => {
     return new THREE.TubeGeometry(curve, 64, 0.05, 8, false);
@@ -153,8 +163,8 @@ function PipelineVariantRoute({ routeId, variant, color }: PipelineVariantProps)
       
       <FlowParticles curve={curve} color={color} />
       
-      <Text position={[midPoint.x, midPoint.y + 0.5, midPoint.z]} fontSize={0.25} color={color} anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor={0x000000}>
-        {routeId} {variant}
+      <Text position={[midPoint.x, midPoint.y + 0.4, midPoint.z]} fontSize={0.22} color={color} anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor={0x000000}>
+        {routeId} {variant} · {VARIANT_ALT_LABELS[variant]}
       </Text>
     </group>
   );

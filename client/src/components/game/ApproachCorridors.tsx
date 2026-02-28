@@ -3,8 +3,8 @@ import * as THREE from "three";
 import { useSimulation, RING_CONFIGS, OPERATOR_CONFIGS } from "@/lib/stores/useSimulation";
 import { buildApproachCurve } from "@/lib/approachPath";
 
-const SD_POSITION: [number, number, number] = [-12, 0, 0];
-const LA_POSITION: [number, number, number] = [12, 0, 8];
+const SD_POSITION: [number, number, number] = [-20, 0, 0];
+const LA_POSITION: [number, number, number] = [20, 0, 0];
 
 /**
  * Renders semi-transparent ILS approach path tubes for:
@@ -36,6 +36,8 @@ export function ApproachCorridors() {
       const cityPos: [number, number, number] =
         ac.cityId === "San Diego" || ac.originCity === "San Diego"
           ? SD_POSITION
+          : ac.cityId === "Orange County" || ac.originCity === "Orange County"
+          ? LA_POSITION
           : LA_POSITION;
 
       const ringCfg = RING_CONFIGS[ac.ringLevel];

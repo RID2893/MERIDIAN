@@ -5,33 +5,36 @@ import { Html } from "@react-three/drei";
 import { useSimulation, RING_CONFIGS, OPERATOR_CONFIGS, type Aircraft as AircraftType } from "@/lib/stores/useSimulation";
 import { buildApproachCurve, clamp } from "@/lib/approachPath";
 
-const SD_POSITION: [number, number, number] = [-12, 0, 0];
-const LA_POSITION: [number, number, number] = [12, 0, 8];
+const SD_POSITION: [number, number, number] = [-20, 0, 0];
+const LA_POSITION: [number, number, number] = [20, 0, 0];
 
+// Must exactly mirror Pipeline.tsx ROUTE_CONFIGS so aircraft follow the rendered tubes
+const RING3_RADIUS = 9;
 const ROUTE_BASE_PATHS = {
   "N-S": {
-    baseStart: new THREE.Vector3(SD_POSITION[0], 0, SD_POSITION[2] - 6),
-    baseEnd: new THREE.Vector3(LA_POSITION[0], 0, LA_POSITION[2] - 6),
-    control1: new THREE.Vector3(-4, 0, -3),
-    control2: new THREE.Vector3(4, 0, 5),
+    baseStart: new THREE.Vector3(SD_POSITION[0], 0, SD_POSITION[2] - RING3_RADIUS),  // (-20,0,-9)
+    baseEnd:   new THREE.Vector3(LA_POSITION[0], 0, LA_POSITION[2] - RING3_RADIUS),  // ( 20,0,-9)
+    control1:  new THREE.Vector3(-7, 0, -11),
+    control2:  new THREE.Vector3( 7, 0, -11),
   },
   "E-W": {
-    baseStart: new THREE.Vector3(SD_POSITION[0] + 6, 0, SD_POSITION[2]),
-    baseEnd: new THREE.Vector3(LA_POSITION[0] - 6, 0, LA_POSITION[2]),
-    control1: new THREE.Vector3(-2, 0, 2),
-    control2: new THREE.Vector3(8, 0, 6),
+    baseStart: new THREE.Vector3(SD_POSITION[0], 0, SD_POSITION[2] + RING3_RADIUS),  // (-20,0,+9)
+    baseEnd:   new THREE.Vector3(LA_POSITION[0], 0, LA_POSITION[2] + RING3_RADIUS),  // ( 20,0,+9)
+    control1:  new THREE.Vector3(-7, 0, 11),
+    control2:  new THREE.Vector3( 7, 0, 11),
   },
 };
 
-const VARIANT_OFFSETS = {
-  CENTER: { offset: 0, altitude: 0 },
-  TOP: { offset: 0.5, altitude: 0.25 },
-  BOTTOM: { offset: -0.5, altitude: -0.25 },
+// Must exactly mirror Pipeline.tsx VARIANT_ALTITUDES + VARIANT_LATERAL
+const VARIANT_ALTITUDES: Record<string, number> = {
+  BOTTOM: (1000 / 1250) * 2,   // 1.6 scene units
+  CENTER: (1500 / 1250) * 2,   // 2.4 scene units
+  TOP:    (2000 / 1250) * 2,   // 3.2 scene units
 };
-
-const CORRIDOR_BASE_ALT = {
-  'N-S': (500 / 1250) * 2,
-  'E-W': (550 / 1250) * 2,
+const VARIANT_LATERAL: Record<string, number> = {
+  CENTER:  0,
+  TOP:    +1.2,
+  BOTTOM: -1.2,
 };
 
 function getOperatorCallsign(aircraft: AircraftType): string {
@@ -43,11 +46,9 @@ function getDisplayAltFt(aircraft: AircraftType): number {
   if (aircraft.status === 'landed') return 0;
   if (aircraft.status === 'in_ring') return RING_CONFIGS[aircraft.ringLevel].altitude;
   if (aircraft.status === 'in_pipeline' && aircraft.pipelineId) {
-    const isNS = aircraft.pipelineId.includes('N-S');
-    const baseAlt = isNS ? 500 : 550;
-    if (aircraft.pipelineId.includes('TOP')) return baseAlt + 100;
-    if (aircraft.pipelineId.includes('BOTTOM')) return baseAlt - 50;
-    return baseAlt;
+    if (aircraft.pipelineId.includes('TOP')) return 2000;
+    if (aircraft.pipelineId.includes('BOTTOM')) return 1000;
+    return 1500; // CENTER
   }
   const ringAlt = RING_CONFIGS[aircraft.ringLevel].altitude;
   return Math.round(Math.max(0, (aircraft.altitude / ringAlt)) * ringAlt);
@@ -65,21 +66,19 @@ function getOpVolume(aircraft: AircraftType): string {
 
 function getPipelinePath(pipelineId: string) {
   const parts = pipelineId.split("-");
-  const variant = parts[parts.length - 1] as keyof typeof VARIANT_OFFSETS;
+  const variant = parts[parts.length - 1];
   const routeId = parts.slice(0, -1).join("-") as keyof typeof ROUTE_BASE_PATHS;
 
   const baseRoute = ROUTE_BASE_PATHS[routeId];
   if (!baseRoute) return null;
 
-  const variantInfo = VARIANT_OFFSETS[variant] || VARIANT_OFFSETS.CENTER;
-  const offsetAmount = variantInfo.offset;
-  const baseAlt = CORRIDOR_BASE_ALT[routeId] || 0.8;
-  const totalAlt = baseAlt + variantInfo.altitude;
+  const alt = VARIANT_ALTITUDES[variant] ?? 2.4;
+  const lat = VARIANT_LATERAL[variant] ?? 0;
 
-  const start = baseRoute.baseStart.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount));
-  const end = baseRoute.baseEnd.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount));
-  const control1 = baseRoute.control1.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount * 0.5));
-  const control2 = baseRoute.control2.clone().add(new THREE.Vector3(0, totalAlt, offsetAmount * 0.5));
+  const start    = baseRoute.baseStart.clone().add(new THREE.Vector3(0, alt, lat));
+  const end      = baseRoute.baseEnd.clone().add(new THREE.Vector3(0, alt, lat));
+  const control1 = baseRoute.control1.clone().add(new THREE.Vector3(0, alt, lat * 0.5));
+  const control2 = baseRoute.control2.clone().add(new THREE.Vector3(0, alt, lat * 0.5));
 
   return { start, end, control1, control2 };
 }

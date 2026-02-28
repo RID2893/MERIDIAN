@@ -4,29 +4,28 @@ import { useFrame, ThreeEvent } from "@react-three/fiber";
 import { useSimulation, type PipelineVariant } from "@/lib/stores/useSimulation";
 import { Text } from "@react-three/drei";
 
-const SD_POSITION: [number, number, number] = [-12, 0, 0];
-const LA_POSITION: [number, number, number] = [12, 0, 8];
+const SD_POSITION: [number, number, number] = [-20, 0, 0];
+const LA_POSITION: [number, number, number] = [20, 0, 0];
 
-// Pipelines connect at Ring 3 (Regional, radius=9) — not the local gate ring (radius=6)
-// SD center: (-12,0,0)  |  OC center: (12,0,8)
-// N-S exits: north face of Ring 3 at each city
-// E-W exits: east face of SD Ring 3 → west face of OC Ring 3
+// Pipelines connect at Ring 3 (Regional, radius=9) — cities are now 40 units apart
+// Layout: N-S corridor arcs along the TOP (north, z<0) of both cities
+//         E-W corridor arcs along the BOTTOM (south, z>0) of both cities
 const RING3_RADIUS = 9;
 
 const ROUTE_CONFIGS = {
   "N-S": {
-    // SD Ring 3 north face → OC Ring 3 north face (both on north side, z decreasing)
-    baseStart: new THREE.Vector3(SD_POSITION[0], 0, SD_POSITION[2] - RING3_RADIUS),
-    baseEnd:   new THREE.Vector3(LA_POSITION[0], 0, LA_POSITION[2] - RING3_RADIUS),
-    control1:  new THREE.Vector3(-4, 0, -6),
-    control2:  new THREE.Vector3(4, 0, -4),
+    // Both cities' Ring 3 NORTH face — corridor highway along the top of the scene
+    baseStart: new THREE.Vector3(SD_POSITION[0], 0, SD_POSITION[2] - RING3_RADIUS),  // (-20, 0, -9)
+    baseEnd:   new THREE.Vector3(LA_POSITION[0], 0, LA_POSITION[2] - RING3_RADIUS),  // ( 20, 0, -9)
+    control1:  new THREE.Vector3(-7, 0, -11),
+    control2:  new THREE.Vector3( 7, 0, -11),
   },
   "E-W": {
-    // SD Ring 3 east face → OC Ring 3 west face (threading through the gap between cities)
-    baseStart: new THREE.Vector3(SD_POSITION[0] + RING3_RADIUS, 0, SD_POSITION[2]),
-    baseEnd:   new THREE.Vector3(LA_POSITION[0] - RING3_RADIUS, 0, LA_POSITION[2]),
-    control1:  new THREE.Vector3(-1, 0, 3),
-    control2:  new THREE.Vector3(1, 0, 5),
+    // Both cities' Ring 3 SOUTH face — corridor highway along the bottom of the scene
+    baseStart: new THREE.Vector3(SD_POSITION[0], 0, SD_POSITION[2] + RING3_RADIUS),  // (-20, 0, +9)
+    baseEnd:   new THREE.Vector3(LA_POSITION[0], 0, LA_POSITION[2] + RING3_RADIUS),  // ( 20, 0, +9)
+    control1:  new THREE.Vector3(-7, 0, 11),
+    control2:  new THREE.Vector3( 7, 0, 11),
   },
 };
 

@@ -10,8 +10,8 @@ import { WeatherEffects } from "./Weather";
 import { useSimulation, RING_CONFIGS, type Aircraft } from "@/lib/stores/useSimulation";
 import { useWeather } from "@/lib/stores/useWeather";
 
-const SD_POSITION: [number, number, number] = [-12, 0, 0];
-const LA_POSITION: [number, number, number] = [12, 0, 8];
+const SD_POSITION: [number, number, number] = [-20, 0, 0];
+const LA_POSITION: [number, number, number] = [20, 0, 0];
 
 function Lights() {
   return (
@@ -40,7 +40,7 @@ function GroundPlane() {
   return (
     <group position={[0, -0.5, 4]}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[60, 40]} />
+        <planeGeometry args={[80, 45]} />
         <meshStandardMaterial
           color={0x1a1a2e}
           roughness={0.9}
@@ -50,7 +50,7 @@ function GroundPlane() {
       
       <Grid
         position={[0, 0.01, 0]}
-        args={[60, 40]}
+        args={[80, 45]}
         cellSize={2}
         cellThickness={0.5}
         cellColor={0x333355}
@@ -323,7 +323,7 @@ export function Scene() {
         maxDistance={60}
         minPolarAngle={0.2}
         maxPolarAngle={Math.PI / 2.2}
-        target={[0, 0, 4]}
+        target={[0, 0, 0]}
       />
     </>
   );

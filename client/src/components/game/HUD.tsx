@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useSimulation, SCENARIO_CONFIGS, RING_CONFIGS, OPERATOR_CONFIGS, REVENUE_SPLIT, ScenarioName, type OperatorCode, type RingLevel, type FlightRequest, type BlockchainTransaction } from "@/lib/stores/useSimulation";
 import { useWeather, type WeatherPreset } from "@/lib/stores/useWeather";
 
@@ -9,6 +10,7 @@ function Header() {
   const simulationTime = useSimulation((state) => state.simulationTime);
   const emergencyOverride = useSimulation((state) => state.emergencyOverride);
   const weatherGrounded = useSimulation((state) => state.weatherGrounded);
+  const [, navigate] = useLocation();
 
   const formattedTime = simulationTime.toLocaleTimeString("en-US", {
     hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
@@ -43,9 +45,30 @@ function Header() {
         )}
       </div>
 
-      <div className="time-display">
-        <span>{formattedDate}</span>
-        <span style={{ marginLeft: "12px" }}>{formattedTime}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <button
+          onClick={() => navigate("/demo")}
+          style={{
+            background: "rgba(0,255,255,0.08)",
+            border: "1px solid rgba(0,255,255,0.3)",
+            color: "#00ffcc",
+            padding: "4px 14px",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "9px",
+            letterSpacing: "2px",
+            fontFamily: "'Orbitron', monospace",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.background = "rgba(0,255,255,0.18)"; }}
+          onMouseLeave={(e) => { (e.target as HTMLButtonElement).style.background = "rgba(0,255,255,0.08)"; }}
+        >
+          ▶ DEMO
+        </button>
+        <div className="time-display">
+          <span>{formattedDate}</span>
+          <span style={{ marginLeft: "12px" }}>{formattedTime}</span>
+        </div>
       </div>
     </div>
   );

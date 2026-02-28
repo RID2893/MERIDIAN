@@ -1,9 +1,11 @@
 import { Canvas } from "@react-three/fiber";
 import { Suspense } from "react";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
+import { Switch, Route } from "wouter";
 import "@fontsource/inter";
 import { Scene } from "./components/game/Scene";
 import { HUD } from "./components/game/HUD";
+import { Demo } from "./pages/Demo";
 
 function LoadingScreen() {
   return (
@@ -42,7 +44,7 @@ function LoadingScreen() {
   );
 }
 
-function App() {
+function Simulator() {
   return (
     <div className="app-container">
       <div className="canvas-container">
@@ -76,6 +78,15 @@ function App() {
       </div>
       <HUD />
     </div>
+  );
+}
+
+function App() {
+  return (
+    <Switch>
+      <Route path="/demo" component={Demo} />
+      <Route component={Simulator} />
+    </Switch>
   );
 }
 

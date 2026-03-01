@@ -8,6 +8,7 @@ import { HUD } from "./components/game/HUD";
 import { Demo } from "./pages/Demo";
 import { PilotApp } from "./pages/PilotApp";
 import { OperatorDashboard } from "./pages/OperatorDashboard";
+import { AdminPortal } from "./pages/AdminPortal";
 
 function LoadingScreen() {
   return (
@@ -89,6 +90,7 @@ function App() {
       <Route path="/demo" component={Demo} />
       <Route path="/pilot" component={PilotApp} />
       <Route path="/operator" component={OperatorDashboard} />
+      <Route path="/admin" component={AdminPortal} />
       <Route component={Simulator} />
     </Switch>
   );

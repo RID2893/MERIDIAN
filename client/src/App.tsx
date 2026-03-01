@@ -9,6 +9,7 @@ import { Demo } from "./pages/Demo";
 import { PilotApp } from "./pages/PilotApp";
 import { OperatorDashboard } from "./pages/OperatorDashboard";
 import { AdminPortal } from "./pages/AdminPortal";
+import { RacingMode } from "./pages/RacingMode";
 
 function LoadingScreen() {
   return (
@@ -91,6 +92,7 @@ function App() {
       <Route path="/pilot" component={PilotApp} />
       <Route path="/operator" component={OperatorDashboard} />
       <Route path="/admin" component={AdminPortal} />
+      <Route path="/racing" component={RacingMode} />
       <Route component={Simulator} />
     </Switch>
   );

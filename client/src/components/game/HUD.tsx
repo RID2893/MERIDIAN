@@ -123,7 +123,7 @@ function Header() {
           ⛨ FAA
         </button>
         <button
-          onClick={() => window.open('/mrcp-simulator.html', '_blank')}
+          onClick={() => navigate('/racing')}
           style={{
             background: "rgba(255,184,0,0.08)",
             border: "1px solid rgba(255,184,0,0.3)",

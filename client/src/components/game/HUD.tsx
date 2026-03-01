@@ -122,6 +122,25 @@ function Header() {
         >
           ⛨ FAA
         </button>
+        <button
+          onClick={() => window.open('/mrcp-simulator.html', '_blank')}
+          style={{
+            background: "rgba(255,184,0,0.08)",
+            border: "1px solid rgba(255,184,0,0.3)",
+            color: "#FFB800",
+            padding: "4px 14px",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "9px",
+            letterSpacing: "2px",
+            fontFamily: "'Orbitron', monospace",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.background = "rgba(255,184,0,0.18)"; }}
+          onMouseLeave={(e) => { (e.target as HTMLButtonElement).style.background = "rgba(255,184,0,0.08)"; }}
+        >
+          🏁 RACING
+        </button>
         <div className="time-display">
           <span>{formattedDate}</span>
           <span style={{ marginLeft: "12px" }}>{formattedTime}</span>

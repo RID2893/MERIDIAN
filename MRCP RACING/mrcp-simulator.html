@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1200, initial-scale=1">
+  <title>MRCP Racing Ecosystem Simulator · Alpha Edge</title>
+  <style>
+    /* ── S0: Design System ───────────────────────────────────────────── */
+    :root {
+      --navy:    #040810;
+      --card:    #0D1A35;
+      --gate-bg: #1A2A4A;
+      --cyan:    #00D4FF;
+      --orange:  #FF6B00;
+      --gold:    #FFB800;
+      --purple:  #8B5CF6;
+      --green:   #00FF88;
+      --red:     #FF3B5C;
+      --white:   #FFFFFF;
+      --muted:   #8A9BB5;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--navy);
+      color: var(--white);
+      font-family: 'Courier New', monospace;
+      min-width: 1200px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ── HEADER ── */
+    #header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      background: linear-gradient(180deg, #0a1428 0%, var(--card) 100%);
+      border-bottom: 1px solid rgba(0,212,255,0.3);
+      flex-shrink: 0;
+      height: 54px;
+    }
+    #header-title {
+      font-family: 'Orbitron', 'Arial Black', sans-serif;
+      color: var(--cyan);
+      font-size: 13px;
+      letter-spacing: 3px;
+      font-weight: 700;
+    }
+    #header-sub { color: var(--muted); font-size: 8px; letter-spacing: 2px; margin-top: 2px; }
+    #header-center { display: flex; align-items: center; gap: 14px; }
+    #live-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--muted); flex-shrink: 0;
+    }
+    #live-dot.active { background: var(--green); box-shadow: 0 0 8px var(--green); animation: blink 1s infinite; }
+    #live-label { color: var(--muted); font-size: 10px; }
+    #race-clock { color: var(--gold); font-size: 17px; font-weight: bold; letter-spacing: 2px; }
+    #lap-indicator { color: var(--orange); font-size: 11px; }
+    #leader-indicator { color: var(--muted); font-size: 10px; }
+
+    /* ── MAIN ── */
+    #main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── LEFT: CIRCUIT ── */
+    #circuit-panel {
+      width: 60%;
+      flex-shrink: 0;
+      position: relative;
+      background: #020810;
+      border-right: 1px solid rgba(0,212,255,0.12);
+      overflow: hidden;
+    }
+    #circuit-svg { width: 100%; height: 100%; display: block; }
+
+    /* tooltips / overlays */
+    #vehicle-tooltip {
+      position: absolute; background: var(--card); border: 1px solid var(--cyan);
+      border-radius: 4px; padding: 6px 10px; font-size: 10px;
+      pointer-events: none; display: none; z-index: 100; color: var(--cyan);
+      line-height: 1.6;
+    }
+    #mission-overlay {
+      position: absolute; top: 20px; left: 20px;
+      background: rgba(13,26,53,0.93); border: 1px solid var(--cyan);
+      border-radius: 6px; padding: 10px 14px; font-size: 11px;
+      display: none; z-index: 50; min-width: 170px;
+    }
+    #mission-overlay.active { display: block; animation: fadeIn 0.3s ease; }
+    #mission-gate-label { color: var(--cyan); font-size: 10px; font-weight: bold; margin-bottom: 3px; }
+    #mission-phase { color: var(--gold); font-size: 9px; margin-bottom: 4px; }
+    #mission-class-a { color: var(--orange); font-size: 10px; }
+    #mission-class-b { color: var(--cyan); font-size: 10px; margin-top: 2px; }
+
+    #gate-hover-card {
+      position: absolute; background: var(--card); border: 1px solid var(--gate-bg);
+      border-radius: 6px; padding: 8px 12px; font-size: 10px;
+      display: none; z-index: 60; pointer-events: none; line-height: 1.7;
+    }
+    #sponsor-banner {
+      position: absolute; top: 10px; right: -500px;
+      background: var(--cyan); color: var(--navy);
+      padding: 10px 20px; font-size: 11px; font-weight: bold; letter-spacing: 1px;
+      z-index: 80; border-radius: 4px 0 0 4px; transition: right 0.5s ease;
+    }
+    #sponsor-banner.active { right: 0; }
+
+    /* ── ALERT BANNER ── */
+    #alert-banner {
+      position: fixed; top: -80px; left: 0; right: 0;
+      background: var(--red); color: #fff; text-align: center;
+      padding: 12px; font-size: 12px; font-weight: bold; letter-spacing: 1px;
+      z-index: 999; transition: top 0.4s ease;
+    }
+    #alert-banner.active { top: 54px; }
+
+    /* ── RIGHT PANEL ── */
+    #right-panel {
+      flex: 1; display: flex; flex-direction: column;
+      overflow-y: auto; padding: 10px; gap: 8px; background: #030c1e;
+    }
+    .panel-card {
+      background: var(--card); border: 1px solid var(--gate-bg);
+      border-radius: 6px; padding: 10px; flex-shrink: 0;
+    }
+    .panel-title {
+      color: var(--cyan); font-size: 9px; letter-spacing: 2px;
+      margin-bottom: 7px; font-weight: bold;
+    }
+
+    /* ── SCORES TABLE ── */
+    #scores-table { width: 100%; border-collapse: collapse; font-size: 9px; }
+    #scores-table th {
+      color: var(--muted); text-align: left; padding: 3px 4px;
+      border-bottom: 1px solid var(--gate-bg); white-space: nowrap;
+    }
+    #scores-table td { padding: 3px 4px; border-bottom: 1px solid rgba(26,42,74,0.4); white-space: nowrap; }
+    .sc { font-weight: bold; transition: background 0.25s; }
+    .sc.flash { background: rgba(0,212,255,0.18); }
+
+    /* ── GATE STATUS BAR ── */
+    #gate-status { display: flex; gap: 4px; }
+    .gate-pill {
+      flex: 1; text-align: center; padding: 5px 2px; border-radius: 4px;
+      border: 1px solid var(--gate-bg); font-size: 7.5px; background: #0a1428;
+      color: var(--muted); transition: all 0.3s;
+    }
+    .gate-pill b { display: block; font-size: 9px; margin-bottom: 2px; }
+    .gate-pill.gate-active { border-color: var(--cyan); color: var(--cyan); animation: gate-pulse 0.8s infinite; }
+    .gate-pill.gate-complete { border-color: var(--green); color: var(--green); background: rgba(0,255,136,0.07); }
+    .gate-pill.gate-finish { border-color: var(--gold); color: var(--gold); background: rgba(255,184,0,0.07); }
+
+    /* ── LEADERBOARD ── */
+    .lb-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 0; border-bottom: 1px solid rgba(26,42,74,0.4);
+      transition: background 0.3s;
+    }
+    .lb-pos { color: var(--gold); width: 16px; font-weight: bold; font-size: 10px; }
+    .lb-name { flex: 1; font-size: 8.5px; overflow: hidden; text-overflow: ellipsis; }
+    .lb-bar-wrap { width: 55px; height: 5px; background: var(--gate-bg); border-radius: 3px; overflow: hidden; }
+    .lb-bar { height: 100%; border-radius: 3px; transition: width 0.5s; }
+    .lb-score { width: 26px; text-align: right; font-size: 9px; font-weight: bold; }
+    .lb-lap { color: var(--muted); font-size: 8px; width: 24px; }
+
+    /* ── AAMI PANEL ── */
+    #aami-card { border-color: var(--purple); }
+    #aami-card .panel-title { color: var(--purple); }
+    .aami-row {
+      display: flex; justify-content: space-between;
+      padding: 3px 0; border-bottom: 1px solid rgba(139,92,246,0.08); font-size: 9px;
+    }
+    .aami-key { color: var(--muted); }
+    .aami-val { font-weight: bold; }
+    .s-active   { color: var(--green); }
+    .s-review   { color: var(--gold); }
+    .s-suspend  { color: var(--red); }
+
+    /* ── CONTROL PANEL ── */
+    #control-panel {
+      display: flex; align-items: center; gap: 7px;
+      padding: 9px 18px; background: #070F22;
+      border-top: 1px solid rgba(0,212,255,0.2);
+      flex-shrink: 0; flex-wrap: wrap;
+    }
+    .btn {
+      padding: 7px 14px; border-radius: 4px; cursor: pointer;
+      font-family: 'Courier New', monospace; font-size: 11px; letter-spacing: 1px;
+      border: 1px solid var(--cyan); background: rgba(0,212,255,0.08); color: var(--cyan);
+      transition: all 0.2s;
+    }
+    .btn:hover { background: rgba(0,212,255,0.18); }
+    .btn-red  { border-color: var(--red);   background: rgba(255,59,92,0.08);  color: var(--red); }
+    .btn-red:hover  { background: rgba(255,59,92,0.2); }
+    .btn-red.pulsing { animation: abort-pulse 0.3s infinite; }
+    .btn-gold { border-color: var(--gold);  background: rgba(255,184,0,0.08);  color: var(--gold); }
+    .ctrl-sep { color: var(--gate-bg); font-size: 20px; }
+    .ctrl-lbl { color: var(--muted); font-size: 10px; }
+    .ctrl-sel {
+      background: var(--card); border: 1px solid var(--gate-bg); color: var(--cyan);
+      padding: 5px 7px; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 10px;
+    }
+    .ctrl-chk-wrap { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+    .ctrl-chk-wrap span { color: var(--muted); font-size: 10px; }
+    input[type=checkbox] { accent-color: var(--cyan); cursor: pointer; }
+
+    /* ── WIDTH WARNING ── */
+    #width-warning {
+      display: none; position: fixed; inset: 0; background: var(--navy); z-index: 9999;
+      align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+      color: var(--cyan); font-size: 14px; text-align: center;
+    }
+
+    /* ── ANIMATIONS ── */
+    @keyframes blink       { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    @keyframes gate-pulse  { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.12);opacity:0.75} }
+    @keyframes abort-pulse { 0%,100%{background:rgba(255,59,92,0.3)} 50%{background:rgba(255,59,92,0.65)} }
+    @keyframes fadeIn      { from{opacity:0} to{opacity:1} }
+  </style>
+</head>
+<body>
+
+<!-- Width warning -->
+<div id="width-warning">
+  <div style="font-size:36px">⚠</div>
+  <div>MINIMUM VIEWPORT: 1200px wide</div>
+  <div style="color:var(--muted);font-size:11px;margin-top:4px">Please resize your browser window</div>
+</div>
+
+<!-- Alert banner -->
+<div id="alert-banner"></div>
+
+<!-- ── HEADER ── -->
+<div id="header">
+  <div>
+    <div id="header-title">MRCP RACING ECOSYSTEM SIMULATOR</div>
+    <div id="header-sub">ALPHA EDGE × AIRSPEEDER × JETSON ONE × AAMI · MRSSP PROTOCOL v1.0</div>
+  </div>
+  <div id="header-center">
+    <div id="live-dot"></div>
+    <div id="live-label">OFFLINE</div>
+    <div id="race-clock">00:00</div>
+    <div id="lap-indicator">LAP 1</div>
+    <div id="leader-indicator">LEADER: —</div>
+  </div>
+  <div style="color:var(--muted);font-size:8px;letter-spacing:1px;text-align:right">
+    MRCP CIRCUIT ALPHA<br>6 GATES · MRSSP ACTIVE
+  </div>
+</div>
+
+<!-- ── MAIN ── -->
+<div id="main">
+
+  <!-- LEFT: Circuit Map -->
+  <div id="circuit-panel">
+    <svg id="circuit-svg" viewBox="0 0 800 550" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="vehicle-tooltip"></div>
+    <div id="mission-overlay">
+      <div id="mission-gate-label"></div>
+      <div id="mission-phase"></div>
+      <div id="mission-class-a"></div>
+      <div id="mission-class-b"></div>
+    </div>
+    <div id="sponsor-banner">⚡ POWER SECTOR · MRSSP EXECUTION PHASE · ALPHA EDGE PLATFORM</div>
+    <div id="gate-hover-card"></div>
+  </div>
+
+  <!-- RIGHT: Data Panels -->
+  <div id="right-panel">
+
+    <!-- MRSSP Scores -->
+    <div class="panel-card">
+      <div class="panel-title">▶ MRSSP LIVE SCORES</div>
+      <table id="scores-table">
+        <thead>
+          <tr>
+            <th style="width:90px">VEHICLE</th>
+            <th>GATE</th>
+            <th>SPD</th>
+            <th>PRC</th>
+            <th>EFF</th>
+            <th>DEC</th>
+            <th>REC</th>
+            <th>∑</th>
+          </tr>
+        </thead>
+        <tbody id="scores-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Gate Status -->
+    <div class="panel-card">
+      <div class="panel-title">⬡ MISSION GATE STATUS</div>
+      <div id="gate-status"></div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div class="panel-card">
+      <div class="panel-title">◈ LEADERBOARD</div>
+      <div id="leaderboard"></div>
+    </div>
+
+    <!-- AAMI Panel -->
+    <div class="panel-card" id="aami-card">
+      <div class="panel-title">🏛 ADVANCED AIR MOBILITY INSTITUTE</div>
+      <div style="color:var(--purple);font-size:7.5px;letter-spacing:1px;margin-bottom:6px">MRSSP CERTIFICATION ACTIVE</div>
+      <div class="aami-row"><span class="aami-key">Telemetry Points Logged</span><span class="aami-val" id="aa-tel">0</span></div>
+      <div class="aami-row"><span class="aami-key">Protocol Compliance</span><span class="aami-val" id="aa-comp">99.7%</span></div>
+      <div class="aami-row"><span class="aami-key">Safety Events Reviewed</span><span class="aami-val" id="aa-safe">0</span></div>
+      <div class="aami-row"><span class="aami-key">Validation Hours</span><span class="aami-val" id="aa-hrs">00:00:00</span></div>
+      <div class="aami-row"><span class="aami-key">Certification Status</span><span class="aami-val s-active" id="aa-status">ACTIVE</span></div>
+      <div class="aami-row"><span class="aami-key">Data Quality Score</span><span class="aami-val" id="aa-qual">99.1%</span></div>
+      <div class="aami-row" style="border:none"><span class="aami-key">Next Audit Gate</span><span class="aami-val" id="aa-audit">G1</span></div>
+      <div style="color:var(--purple);font-size:8px;text-align:center;margin-top:7px;letter-spacing:1px">FAA · EASA · CASA</div>
+      <div style="color:var(--muted);font-size:7px;text-align:center;margin-top:2px">🏛 INDEPENDENT CERTIFICATION BODY · AAMI PARTNER SINCE 2025</div>
+    </div>
+
+  </div><!-- /right-panel -->
+</div><!-- /main -->
+
+<!-- ── CONTROL PANEL ── -->
+<div id="control-panel">
+  <button class="btn" id="btn-start" onclick="handleStart()">▶ START</button>
+  <button class="btn btn-red" id="btn-abort" onclick="handleAbort()">🚨 ABORT</button>
+  <button class="btn" id="btn-reset" onclick="handleReset()">↺ RESET</button>
+  <button class="btn" id="btn-force" onclick="handleForceGate()">⚡ FORCE GATE</button>
+  <span class="ctrl-sep">|</span>
+  <span class="ctrl-lbl">FOLLOW</span>
+  <select class="ctrl-sel" id="follow-sel" onchange="handleFollow()">
+    <option value="">None</option>
+    <option value="AE-MK4-001">AE-MK4-001</option>
+    <option value="AE-MK4-002">AE-MK4-002</option>
+    <option value="JT-ONE-003">JT-ONE-003</option>
+    <option value="AUTO-001">AUTO-001</option>
+    <option value="AUTO-002">AUTO-002</option>
+    <option value="PAYLOAD-003">PAYLOAD-003</option>
+  </select>
+  <span class="ctrl-sep">|</span>
+  <label class="ctrl-chk-wrap">
+    <input type="checkbox" id="chk-a" checked onchange="handleClassToggle()">
+    <span>🟠 Class A</span>
+  </label>
+  <label class="ctrl-chk-wrap">
+    <input type="checkbox" id="chk-b" checked onchange="handleClassToggle()">
+    <span>🔵 Class B</span>
+  </label>
+  <span class="ctrl-sep">|</span>
+  <button class="btn btn-gold" onclick="handleDemoMode()">🎬 DEMO</button>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// S1: CONSTANTS — Gates & Circuit Path
+// ═══════════════════════════════════════════════════════════════════════
+const W = 800, H = 550;
+
+const GATES = {
+  G1:     { x:0.15, y:0.25, name:'Recon Sector',      mrssp:'Discovery',    color:'#8A9BB5', ca:'Visual recon sweep',   cb:'Sensor array scan'  },
+  G2:     { x:0.40, y:0.10, name:'Technical Zone',     mrssp:'Assessment',   color:'#00D4FF', ca:'Manual precision run',  cb:'AI path optimize'   },
+  G3:     { x:0.70, y:0.20, name:'Strategy Waypoint',  mrssp:'Road-Map',     color:'#00D4FF', ca:'Pilot decision point',  cb:'Route computation'  },
+  G4:     { x:0.85, y:0.55, name:'Power Sector',       mrssp:'Execution',    color:'#FF6B00', ca:'Full throttle run',     cb:'Max velocity AI'    },
+  G5:     { x:0.65, y:0.80, name:'Final Push',         mrssp:'Optimization', color:'#FF6B00', ca:'Final climb sprint',    cb:'Endurance mode AI'  },
+  FINISH: { x:0.20, y:0.75, name:'Data Capture',       mrssp:'Closure',      color:'#00FF88', ca:'Debrief & descent',    cb:'Full data upload'   },
+};
+const GK = ['G1','G2','G3','G4','G5','FINISH'];
+
+// Cubic bezier path segments (normalized 0–1, 6 segments → 1 closed loop)
+const SEGS = [
+  { p0:[0.15,0.25], c1:[0.22,0.08], c2:[0.32,0.07], p3:[0.40,0.10] }, // G1→G2
+  { p0:[0.40,0.10], c1:[0.50,0.06], c2:[0.62,0.10], p3:[0.70,0.20] }, // G2→G3
+  { p0:[0.70,0.20], c1:[0.80,0.22], c2:[0.90,0.38], p3:[0.85,0.55] }, // G3→G4
+  { p0:[0.85,0.55], c1:[0.88,0.70], c2:[0.80,0.82], p3:[0.65,0.80] }, // G4→G5
+  { p0:[0.65,0.80], c1:[0.52,0.90], c2:[0.35,0.88], p3:[0.20,0.75] }, // G5→FINISH
+  { p0:[0.20,0.75], c1:[0.08,0.65], c2:[0.07,0.42], p3:[0.15,0.25] }, // FINISH→G1
+];
+
+function cubicBez(p0, c1, c2, p3, t) {
+  const u = 1 - t;
+  return [
+    u*u*u*p0[0] + 3*u*u*t*c1[0] + 3*u*t*t*c2[0] + t*t*t*p3[0],
+    u*u*u*p0[1] + 3*u*u*t*c1[1] + 3*u*t*t*c2[1] + t*t*t*p3[1],
+  ];
+}
+
+// getPointOnPath: t ∈ [0,1] → {x,y} in SVG pixel coords
+function getPos(t) {
+  t = ((t % 1) + 1) % 1;
+  const si = Math.min(Math.floor(t * 6), 5);
+  const lt = (t * 6) - si;
+  const s = SEGS[si];
+  const [nx, ny] = cubicBez(s.p0, s.c1, s.c2, s.p3, lt);
+  return { x: nx * W, y: ny * H };
+}
+
+function curGateIdx(t) {
+  return Math.floor(((t % 1 + 1) % 1) * 6);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S2: VEHICLE DATA
+// ═══════════════════════════════════════════════════════════════════════
+function mkScores() {
+  return { gate_time:75, mission_precision:75, energy_efficiency:75, decision_speed:75, recovery_index:75, composite:75 };
+}
+
+const VEHICLES = [
+  { id:'AE-MK4-001', name:'Airspeeder Alpha', cls:'A', color:'#FF6B00', spd:1.00, t:0.00, bat:100, lap:1, trail:[], scores:mkScores(), aborted:false, rec:75 },
+  { id:'AE-MK4-002', name:'Airspeeder Beta',  cls:'A', color:'#CC5500', spd:0.95, t:0.15, bat:100, lap:1, trail:[], scores:mkScores(), aborted:false, rec:75 },
+  { id:'JT-ONE-003', name:'Jetson Crew One',  cls:'A', color:'#FFB800', spd:0.80, t:0.30, bat:100, lap:1, trail:[], scores:mkScores(), aborted:false, rec:75 },
+  { id:'AUTO-001',   name:'Autonomous Alpha', cls:'B', color:'#00D4FF', spd:1.10, t:0.05, bat:100, lap:1, trail:[], scores:mkScores(), aborted:false, rec:75 },
+  { id:'AUTO-002',   name:'Autonomous Beta',  cls:'B', color:'#0099CC', spd:1.05, t:0.20, bat:100, lap:1, trail:[], scores:mkScores(), aborted:false, rec:75 },
+  { id:'PAYLOAD-003',name:'Payload Craft',    cls:'B', color:'#8B5CF6', spd:0.75, t:0.40, bat:100, lap:1, trail:[], scores:mkScores(), aborted:false, rec:75 },
+];
+
+const RS = {           // RACE_STATE
+  running: false,
+  time: 0, lastTs: 0,
+  followId: '',
+  showA: true, showB: true,
+  gSt: { G1:'W', G2:'W', G3:'W', G4:'W', G5:'W', FINISH:'W' }, // W=waiting A=active C=complete
+  abortBusy: false,
+  demoRunning: false,
+};
+
+const AAMI = { tel:0, safe:0, startMs:null };
+let telIv = null, qualIv = null, scoreIv = null;
+
+// ═══════════════════════════════════════════════════════════════════════
+// S1: SVG CIRCUIT BUILD
+// ═══════════════════════════════════════════════════════════════════════
+function buildCircuit() {
+  const svg = document.getElementById('circuit-svg');
+  svg.innerHTML = '';
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs) => {
+    const e = document.createElementNS(ns, tag);
+    for (const [k,v] of Object.entries(attrs)) e.setAttribute(k, v);
+    return e;
+  };
+
+  // Background grid
+  for (let x = 0; x <= W; x += 80)
+    svg.appendChild(el('line', {x1:x,y1:0,x2:x,y2:H, stroke:'#0c1826', 'stroke-width':'0.5'}));
+  for (let y = 0; y <= H; y += 55)
+    svg.appendChild(el('line', {x1:0,y1:y,x2:W,y2:y, stroke:'#0c1826', 'stroke-width':'0.5'}));
+
+  // Airspace bands
+  svg.appendChild(el('rect', {id:'band-a', x:0,y:0, width:W, height:H*0.60, fill:'rgba(255,107,0,0.07)'}));
+  svg.appendChild(el('rect', {id:'band-b', x:0,y:H*0.60, width:W, height:H*0.40, fill:'rgba(0,212,255,0.05)'}));
+
+  // Buffer zone
+  svg.appendChild(el('line', {x1:0,y1:H*0.60,x2:W,y2:H*0.60, stroke:'rgba(255,59,92,0.55)', 'stroke-width':'1.5', 'stroke-dasharray':'8,5'}));
+
+  // Band labels
+  const txt = (content, x, y, fill, size='9') => {
+    const t = document.createElementNS(ns,'text');
+    t.setAttribute('x',x); t.setAttribute('y',y);
+    t.setAttribute('fill',fill); t.setAttribute('font-size',size);
+    t.setAttribute('font-family','Courier New'); t.setAttribute('opacity','0.6');
+    t.textContent = content; return t;
+  };
+  svg.appendChild(txt('CLASS A · 30–80m AGL', 8, 15, '#FF6B00'));
+  svg.appendChild(txt('⚠ BUFFER ZONE', 8, H*0.60 - 5, 'rgba(255,59,92,0.7)'));
+  svg.appendChild(txt('CLASS B · 0–30m AGL', 8, H*0.60 + 13, '#00D4FF'));
+  svg.appendChild(txt('MRCP CIRCUIT ALPHA · 6 GATES · MRSSP PROTOCOL ACTIVE', W/2-150, H-5, '#1c2e4a'));
+
+  // Track path
+  let d = `M ${SEGS[0].p0[0]*W} ${SEGS[0].p0[1]*H}`;
+  SEGS.forEach(s => { d += ` C ${s.c1[0]*W} ${s.c1[1]*H},${s.c2[0]*W} ${s.c2[1]*H},${s.p3[0]*W} ${s.p3[1]*H}`; });
+  d += ' Z';
+  svg.appendChild(el('path', {d, stroke:'rgba(0,212,255,0.32)', 'stroke-width':'3', fill:'none'}));
+
+  // Gates
+  GK.forEach(gk => {
+    const g = GATES[gk];
+    const cx = g.x * W, cy = g.y * H;
+    const grp = document.createElementNS(ns,'g');
+    grp.id = `gg-${gk}`; grp.style.cursor = 'pointer';
+
+    grp.appendChild(el('circle', {id:`go-${gk}`, cx, cy, r:16, stroke:g.color, 'stroke-width':'1.5', fill:'rgba(10,20,45,0.85)'}));
+    grp.appendChild(el('circle', {id:`gi-${gk}`, cx, cy, r:5,  fill:g.color}));
+
+    const lb = document.createElementNS(ns,'text');
+    lb.setAttribute('x',cx); lb.setAttribute('y',cy+28); lb.setAttribute('text-anchor','middle');
+    lb.setAttribute('fill',g.color); lb.setAttribute('font-size','8'); lb.setAttribute('font-family','Courier New');
+    lb.textContent = gk;
+    grp.appendChild(lb);
+
+    const sub = document.createElementNS(ns,'text');
+    sub.setAttribute('x',cx); sub.setAttribute('y',cy+38); sub.setAttribute('text-anchor','middle');
+    sub.setAttribute('fill','rgba(138,155,181,0.65)'); sub.setAttribute('font-size','7'); sub.setAttribute('font-family','Courier New');
+    sub.textContent = g.mrssp;
+    grp.appendChild(sub);
+
+    grp.addEventListener('mouseenter', e => showGateCard(gk, e));
+    grp.addEventListener('mouseleave', () => { document.getElementById('gate-hover-card').style.display='none'; });
+    svg.appendChild(grp);
+  });
+
+  // Trail group (below vehicles)
+  const tg = document.createElementNS(ns,'g'); tg.id='trail-grp'; svg.appendChild(tg);
+
+  // Vehicle group
+  const vg = document.createElementNS(ns,'g'); vg.id='veh-grp'; svg.appendChild(vg);
+
+  VEHICLES.forEach(v => {
+    const grp = document.createElementNS(ns,'g');
+    grp.id = `vg-${v.id}`; grp.style.cursor='pointer';
+
+    const glow = document.createElementNS(ns,'circle');
+    glow.id = `vglow-${v.id}`; glow.setAttribute('r','18');
+    glow.setAttribute('fill','transparent'); glow.setAttribute('stroke',v.color);
+    glow.setAttribute('stroke-width','2'); glow.setAttribute('opacity','0');
+    grp.appendChild(glow);
+
+    const c = document.createElementNS(ns,'circle');
+    c.id = `vc-${v.id}`; c.setAttribute('r', v.cls==='A'?'8':'6'); c.setAttribute('fill',v.color);
+    grp.appendChild(c);
+
+    grp.addEventListener('mouseenter', e => showVehTip(v, e));
+    grp.addEventListener('mouseleave', () => { document.getElementById('vehicle-tooltip').style.display='none'; });
+    document.getElementById('veh-grp').appendChild(grp);
+  });
+
+  initRightPanel();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S4: RIGHT PANEL INIT
+// ═══════════════════════════════════════════════════════════════════════
+function initRightPanel() {
+  // Score rows
+  const tb = document.getElementById('scores-tbody');
+  tb.innerHTML = '';
+  VEHICLES.forEach(v => {
+    const tr = document.createElement('tr');
+    tr.id = `sr-${v.id}`;
+    tr.innerHTML = `
+      <td><span style="color:${v.cls==='A'?'#FF6B00':'#00D4FF'}">${v.cls==='A'?'🟠':'🔵'}</span>&nbsp;<span style="color:${v.color}">${v.id}</span></td>
+      <td id="sg-${v.id}">G1</td>
+      <td class="sc" id="ss-${v.id}">75</td>
+      <td class="sc" id="sp-${v.id}">75</td>
+      <td class="sc" id="se-${v.id}">75</td>
+      <td class="sc" id="sd-${v.id}">75</td>
+      <td class="sc" id="sr2-${v.id}">75</td>
+      <td class="sc" id="sc-${v.id}">75</td>
+    `;
+    tb.appendChild(tr);
+  });
+
+  // Gate pills
+  const gs = document.getElementById('gate-status');
+  gs.innerHTML = '';
+  GK.forEach(gk => {
+    const p = document.createElement('div');
+    p.className = 'gate-pill'; p.id = `gp-${gk}`;
+    p.innerHTML = `<b>${gk}</b>${GATES[gk].mrssp}`;
+    gs.appendChild(p);
+  });
+
+  renderLeaderboard();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S3: MRSSP SCORING ENGINE
+// ═══════════════════════════════════════════════════════════════════════
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const vrn = () => (Math.random()-0.5)*16;  // ±8% variance
+
+function updateScores() {
+  VEHICLES.forEach(v => {
+    if (v.aborted) {
+      v.rec = Math.min(100, v.rec + 5);
+      v.scores.recovery_index = v.rec;
+      v.scores.composite = calcComposite(v.scores);
+      return;
+    }
+    const s = v.scores;
+    s.gate_time         = clamp(70 + v.spd * 15 + vrn(), 0, 100);
+    s.mission_precision = clamp((v.cls==='A' ? 80 : 72) + vrn(), 0, 100);
+    s.energy_efficiency = clamp(60 + v.bat * 0.3 + vrn(), 0, 100);
+    s.decision_speed    = clamp((v.cls==='B' ? 82 : 70) + vrn(), 0, 100);
+    s.recovery_index    = clamp(72 + vrn(), 0, 100);
+    s.composite         = calcComposite(s);
+  });
+  renderScores();
+  renderLeaderboard();
+}
+
+function calcComposite(s) {
+  return clamp(s.gate_time*0.25 + s.mission_precision*0.25 + s.energy_efficiency*0.20
+             + s.decision_speed*0.15 + s.recovery_index*0.15, 0, 100);
+}
+
+function scoreCol(n) {
+  return n >= 85 ? '#00FF88' : n >= 70 ? '#FF6B00' : '#FF3B5C';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S4: DISPLAY UPDATES
+// ═══════════════════════════════════════════════════════════════════════
+function renderScores() {
+  VEHICLES.forEach(v => {
+    const s = v.scores;
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (v.aborted && id === `sc-${v.id}`) {
+        el.textContent = 'ABORT'; el.style.color = '#FF3B5C'; return;
+      }
+      const n = Math.round(val);
+      el.textContent = n; el.style.color = scoreCol(n);
+      el.classList.add('flash');
+      setTimeout(() => el.classList.remove('flash'), 250);
+    };
+    set(`ss-${v.id}`,  s.gate_time);
+    set(`sp-${v.id}`,  s.mission_precision);
+    set(`se-${v.id}`,  s.energy_efficiency);
+    set(`sd-${v.id}`,  s.decision_speed);
+    set(`sr2-${v.id}`, s.recovery_index);
+    set(`sc-${v.id}`,  s.composite);
+    const gel = document.getElementById(`sg-${v.id}`);
+    if (gel) gel.textContent = GK[curGateIdx(v.t)] || 'G1';
+  });
+}
+
+function renderLeaderboard() {
+  const sorted = [...VEHICLES].sort((a,b) => b.scores.composite - a.scores.composite);
+  const lb = document.getElementById('leaderboard');
+  lb.innerHTML = '';
+  sorted.forEach((v, i) => {
+    const pct = Math.round(v.scores.composite);
+    const col = scoreCol(v.scores.composite);
+    const row = document.createElement('div');
+    row.className = 'lb-row'; row.id = `lb-${v.id}`;
+    row.innerHTML = `
+      <span class="lb-pos">#${i+1}</span>
+      <span class="lb-name" style="color:${v.color}">${v.id}</span>
+      <div class="lb-bar-wrap"><div class="lb-bar" style="width:${pct}%;background:${col}"></div></div>
+      <span class="lb-score" style="color:${col}">${pct}</span>
+      <span class="lb-lap">L${v.lap}</span>
+    `;
+    lb.appendChild(row);
+  });
+  if (sorted[0]) {
+    document.getElementById('leader-indicator').textContent = 'LEADER: ' + sorted[0].id;
+    document.getElementById('lap-indicator').textContent    = 'LAP ' + sorted[0].lap;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S5: GATE ACTIVATION SYSTEM
+// ═══════════════════════════════════════════════════════════════════════
+function checkGates() {
+  VEHICLES.forEach(v => {
+    if (v.aborted) return;
+    const pos = getPos(v.t);
+    GK.forEach(gk => {
+      if (RS.gSt[gk] !== 'W') return;
+      const g = GATES[gk];
+      const dx = pos.x - g.x*W, dy = pos.y - g.y*H;
+      if (Math.sqrt(dx*dx+dy*dy) < 0.05*W) activateGate(gk, v);
+    });
+  });
+}
+
+function activateGate(gk, v) {
+  RS.gSt[gk] = 'A';
+  const pill = document.getElementById(`gp-${gk}`);
+  if (pill) pill.className = 'gate-pill gate-active';
+  setGateSVG(gk, 'A');
+  showMissionOverlay(gk);
+  if (gk === 'G4') showSponsor();
+  const nxt = GK[(GK.indexOf(gk)+1)%6];
+  document.getElementById('aa-audit').textContent = nxt;
+  setTimeout(() => completeGate(gk, v), 2000);
+}
+
+function completeGate(gk, v) {
+  if (RS.gSt[gk] !== 'A') return;
+  RS.gSt[gk] = 'C';
+  const pill = document.getElementById(`gp-${gk}`);
+  if (pill) pill.className = `gate-pill ${gk==='FINISH'?'gate-finish':'gate-complete'}`;
+  setGateSVG(gk, 'C');
+  if (gk === 'FINISH') onFinish(v);
+}
+
+function onFinish(v) {
+  VEHICLES.forEach(vv => { if (vv.lap <= v.lap) vv.lap++; });
+  setTimeout(() => {
+    GK.forEach(gk => {
+      RS.gSt[gk] = 'W';
+      const p = document.getElementById(`gp-${gk}`);
+      if (p) p.className = 'gate-pill';
+      setGateSVG(gk, 'W');
+    });
+    // Auto-abort check: lap 3, 15% chance
+    if (v.lap >= 3 && Math.random() < 0.15) {
+      const classB = VEHICLES.filter(vv => vv.cls==='B' && !vv.aborted);
+      if (classB.length) triggerAbort(classB[Math.floor(Math.random()*classB.length)].id);
+    }
+  }, 1500);
+}
+
+function setGateSVG(gk, state) {
+  const outer = document.getElementById(`go-${gk}`);
+  const inner = document.getElementById(`gi-${gk}`);
+  if (!outer || !inner) return;
+  if (state === 'A') {
+    outer.setAttribute('stroke-width','3'); outer.setAttribute('opacity','1');
+  } else if (state === 'C') {
+    outer.setAttribute('stroke','#00FF88'); inner.setAttribute('fill','#00FF88');
+    outer.setAttribute('stroke-width','2');
+  } else {
+    outer.setAttribute('stroke', GATES[gk].color); inner.setAttribute('fill', GATES[gk].color);
+    outer.setAttribute('stroke-width','1.5'); outer.setAttribute('opacity','1');
+  }
+}
+
+function showMissionOverlay(gk) {
+  const g = GATES[gk];
+  document.getElementById('mission-gate-label').textContent = `⚡ ${gk} ACTIVE — ${g.name.toUpperCase()}`;
+  document.getElementById('mission-phase').textContent   = `MRSSP PHASE: ${g.mrssp}`;
+  document.getElementById('mission-class-a').textContent = `🟠 ${g.ca}`;
+  document.getElementById('mission-class-b').textContent = `🔵 ${g.cb}`;
+  const mo = document.getElementById('mission-overlay');
+  mo.classList.add('active');
+  setTimeout(() => mo.classList.remove('active'), 3000);
+}
+
+function showSponsor() {
+  const b = document.getElementById('sponsor-banner');
+  b.classList.add('active');
+  setTimeout(() => b.classList.remove('active'), 4000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S7: SAFETY ABORT SYSTEM
+// ═══════════════════════════════════════════════════════════════════════
+function triggerAbort(vehicleId = null) {
+  if (RS.abortBusy) return;
+  RS.abortBusy = true;
+  const targets = vehicleId
+    ? VEHICLES.filter(v => v.id === vehicleId)
+    : VEHICLES.filter(v => v.cls === 'B');
+
+  // T=0
+  showAlert('🚨 MRSSP SAFETY ABORT — LEVEL 1 TRIGGERED · CLASS B EMERGENCY LANDING', '#c0222e');
+  targets.forEach(v => {
+    v.aborted = true; v.rec = 40;
+    const c = document.getElementById(`vc-${v.id}`);   if (c) c.setAttribute('fill','#FF3B5C');
+    const g = document.getElementById(`vglow-${v.id}`); if (g) { g.setAttribute('stroke','#FF3B5C'); g.setAttribute('opacity','0.8'); }
+  });
+
+  // T=1s — AAMI
+  setTimeout(() => {
+    AAMI.safe++;
+    document.getElementById('aa-safe').textContent = AAMI.safe;
+    setAAMIStatus('REVIEWING');
+  }, 1000);
+
+  // T=2s — ground station banner
+  setTimeout(() => showAlert('⚠ GROUND STATION OVERRIDE ACTIVE · RSO COMMAND CONFIRMED', '#7a4200'), 2000);
+
+  // T=5s — recovery
+  setTimeout(() => {
+    targets.forEach(v => {
+      v.aborted = false; v.rec = 40;
+      v.t = (Math.round(v.t*6)/6 + 0.001) % 1;
+      const c = document.getElementById(`vc-${v.id}`); if (c) c.setAttribute('fill', v.color);
+      const g = document.getElementById(`vglow-${v.id}`); if (g) g.setAttribute('opacity','0');
+    });
+    showAlert('✅ RECOVERY COMPLETE · MRSSP LOG ENTRY FILED · AAMI NOTIFIED', '#0a3020');
+    setTimeout(() => { hideAlert(); RS.abortBusy = false; setAAMIStatus('ACTIVE'); }, 3000);
+  }, 5000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S8: AAMI PANEL
+// ═══════════════════════════════════════════════════════════════════════
+function startAAMI() {
+  if (!AAMI.startMs) AAMI.startMs = Date.now();
+  if (telIv) return;
+  telIv = setInterval(() => {
+    if (!RS.running) return;
+    AAMI.tel++;
+    document.getElementById('aa-tel').textContent = AAMI.tel.toLocaleString();
+    const sec = Math.floor((Date.now()-AAMI.startMs)/1000);
+    const h = String(Math.floor(sec/3600)).padStart(2,'0');
+    const m = String(Math.floor((sec%3600)/60)).padStart(2,'0');
+    const s = String(sec%60).padStart(2,'0');
+    document.getElementById('aa-hrs').textContent = `${h}:${m}:${s}`;
+  }, 20);
+  qualIv = setInterval(() => {
+    if (!RS.running) return;
+    document.getElementById('aa-comp').textContent = (99.5 + Math.random()*0.4).toFixed(1) + '%';
+    document.getElementById('aa-qual').textContent = (98.0 + Math.random()*1.9).toFixed(1) + '%';
+  }, 2000);
+}
+
+function stopAAMI()  { clearInterval(telIv); clearInterval(qualIv); telIv=null; qualIv=null; }
+function resetAAMI() {
+  stopAAMI();
+  AAMI.tel=0; AAMI.safe=0; AAMI.startMs=null;
+  ['aa-tel','aa-safe','aa-hrs'].forEach(id => {
+    document.getElementById(id).textContent = id==='aa-hrs'?'00:00:00':'0';
+  });
+  document.getElementById('aa-comp').textContent = '99.7%';
+  document.getElementById('aa-qual').textContent = '99.1%';
+  setAAMIStatus('ACTIVE');
+}
+
+function setAAMIStatus(s) {
+  const el = document.getElementById('aa-status');
+  el.textContent = s;
+  el.className = 'aami-val ' + (s==='ACTIVE'?'s-active': s==='REVIEWING'?'s-review':'s-suspend');
+  if (s==='REVIEWING') setTimeout(()=>setAAMIStatus('ACTIVE'), 8000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S2: ANIMATION LOOP
+// ═══════════════════════════════════════════════════════════════════════
+const BASE_SPD = 0.000055; // t-units per ms
+
+function loop(ts) {
+  if (!RS.lastTs) RS.lastTs = ts;
+  const dt = ts - RS.lastTs;
+  RS.lastTs = ts;
+
+  if (RS.running) {
+    RS.time += dt / 1000;
+    VEHICLES.forEach(v => {
+      if (v.aborted) return;
+      v.t = ((v.t + v.spd * BASE_SPD * dt) % 1 + 1) % 1;
+      v.bat = Math.max(0, v.bat - 0.001);
+      const p = getPos(v.t);
+      v.trail.push({x:p.x, y:p.y, t:RS.time});
+      if (v.trail.length > 28) v.trail.shift();
+    });
+    checkGates();
+    updateClock();
+    renderVehicles();
+    renderTrails();
+  }
+  requestAnimationFrame(loop);
+}
+
+function renderVehicles() {
+  VEHICLES.forEach(v => {
+    const grp = document.getElementById(`vg-${v.id}`);
+    if (!grp) return;
+    const vis = (v.cls==='A' && RS.showA) || (v.cls==='B' && RS.showB);
+    grp.style.display = vis ? '' : 'none';
+
+    const p = getPos(v.t);
+    const yOff = v.cls === 'A' ? -20 : 20;
+    grp.setAttribute('transform', `translate(${p.x},${p.y+yOff})`);
+
+    const followed = RS.followId === v.id;
+    const c  = document.getElementById(`vc-${v.id}`);
+    const g  = document.getElementById(`vglow-${v.id}`);
+    if (c && !v.aborted) c.setAttribute('fill', v.color);
+    if (c) c.setAttribute('r', followed ? (v.cls==='A'?12:9) : (v.cls==='A'?8:6));
+    if (g) {
+      g.setAttribute('opacity', followed ? '0.55' : '0');
+      g.style.animation = followed ? 'gate-pulse 1.5s infinite' : '';
+    }
+  });
+}
+
+function renderTrails() {
+  const tg = document.getElementById('trail-grp');
+  tg.innerHTML = '';
+  if (!RS.followId) return;
+  const v = VEHICLES.find(vv => vv.id === RS.followId);
+  if (!v || v.trail.length < 2) return;
+  const yOff = v.cls === 'A' ? -20 : 20;
+  const ns = 'http://www.w3.org/2000/svg';
+  for (let i = 1; i < v.trail.length; i++) {
+    const age = RS.time - v.trail[i].time;
+    const alpha = Math.max(0, 0.55 - age * 0.55);
+    if (alpha <= 0) continue;
+    const line = document.createElementNS(ns, 'line');
+    line.setAttribute('x1', v.trail[i-1].x); line.setAttribute('y1', v.trail[i-1].y + yOff);
+    line.setAttribute('x2', v.trail[i].x);   line.setAttribute('y2', v.trail[i].y + yOff);
+    line.setAttribute('stroke', v.color); line.setAttribute('stroke-width','2');
+    line.setAttribute('stroke-dasharray','3,3'); line.setAttribute('opacity', alpha);
+    tg.appendChild(line);
+  }
+}
+
+function updateClock() {
+  const t = Math.floor(RS.time);
+  document.getElementById('race-clock').textContent =
+    String(Math.floor(t/60)).padStart(2,'0') + ':' + String(t%60).padStart(2,'0');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S6: CONTROLS
+// ═══════════════════════════════════════════════════════════════════════
+function handleStart() {
+  const btn = document.getElementById('btn-start');
+  if (!RS.running) {
+    RS.running = true;
+    btn.textContent = '⏸ PAUSE';
+    document.getElementById('live-dot').classList.add('active');
+    document.getElementById('live-label').textContent = 'LIVE';
+    if (!scoreIv) scoreIv = setInterval(() => { if (RS.running) updateScores(); }, 500);
+    startAAMI();
+  } else {
+    RS.running = false;
+    btn.textContent = '▶ RESUME';
+    document.getElementById('live-dot').classList.remove('active');
+    document.getElementById('live-label').textContent = 'PAUSED';
+  }
+}
+
+function handleAbort() {
+  const btn = document.getElementById('btn-abort');
+  btn.classList.add('pulsing');
+  setTimeout(() => btn.classList.remove('pulsing'), 2000);
+  triggerAbort(null);
+}
+
+function handleReset() {
+  RS.running = false; RS.time = 0; RS.lastTs = 0;
+  RS.abortBusy = false;
+  document.getElementById('btn-start').textContent = '▶ START';
+  document.getElementById('live-dot').classList.remove('active');
+  document.getElementById('live-label').textContent = 'OFFLINE';
+  document.getElementById('race-clock').textContent = '00:00';
+  document.getElementById('lap-indicator').textContent  = 'LAP 1';
+  document.getElementById('leader-indicator').textContent = 'LEADER: —';
+
+  clearInterval(scoreIv); scoreIv = null;
+
+  const startTs = [0.00, 0.15, 0.30, 0.05, 0.20, 0.40];
+  VEHICLES.forEach((v, i) => {
+    v.t=startTs[i]; v.bat=100; v.lap=1; v.trail=[]; v.aborted=false; v.rec=75;
+    v.scores = mkScores();
+    const c = document.getElementById(`vc-${v.id}`); if (c) { c.setAttribute('fill',v.color); c.setAttribute('r',v.cls==='A'?'8':'6'); }
+    const g = document.getElementById(`vglow-${v.id}`); if (g) g.setAttribute('opacity','0');
+  });
+
+  GK.forEach(gk => {
+    RS.gSt[gk] = 'W';
+    const p = document.getElementById(`gp-${gk}`); if (p) p.className = 'gate-pill';
+    setGateSVG(gk, 'W');
+  });
+
+  resetAAMI();
+  hideAlert();
+  initRightPanel();
+}
+
+function handleForceGate() {
+  if (!RS.followId) return;
+  const v = VEHICLES.find(vv => vv.id === RS.followId);
+  if (!v) return;
+  v.t = ((Math.floor(v.t*6)+1) % 6) / 6 + 0.002;
+}
+
+function handleFollow() {
+  RS.followId = document.getElementById('follow-sel').value;
+}
+
+function handleClassToggle() {
+  RS.showA = document.getElementById('chk-a').checked;
+  RS.showB = document.getElementById('chk-b').checked;
+  const ba = document.getElementById('band-a'); if (ba) ba.setAttribute('opacity', RS.showA?1:0);
+  const bb = document.getElementById('band-b'); if (bb) bb.setAttribute('opacity', RS.showB?1:0);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S5: TOOLTIPS / HOVER
+// ═══════════════════════════════════════════════════════════════════════
+function showGateCard(gk, e) {
+  const g = GATES[gk];
+  const card = document.getElementById('gate-hover-card');
+  card.innerHTML = `<div style="color:${g.color};font-weight:bold;margin-bottom:3px">${gk} — ${g.name}</div>
+    <div style="color:#8A9BB5">MRSSP: ${g.mrssp}</div>
+    <div style="color:#FF6B00;margin-top:3px">🟠 ${g.ca}</div>
+    <div style="color:#00D4FF">🔵 ${g.cb}</div>
+    <div style="color:#444;font-size:8px;margin-top:3px">Status: ${RS.gSt[gk]==='W'?'WAITING':RS.gSt[gk]==='A'?'ACTIVE':'COMPLETE'}</div>`;
+  const rect = document.getElementById('circuit-panel').getBoundingClientRect();
+  card.style.left = (e.clientX - rect.left + 12) + 'px';
+  card.style.top  = (e.clientY - rect.top - 20) + 'px';
+  card.style.display = 'block';
+}
+
+function showVehTip(v, e) {
+  const tt = document.getElementById('vehicle-tooltip');
+  tt.innerHTML = `<b style="color:${v.color}">${v.id}</b><br>
+    Class ${v.cls} · Battery: ${v.bat.toFixed(1)}%<br>
+    Speed: ${v.spd}× · Lap: ${v.lap}<br>
+    Composite: ${Math.round(v.scores.composite)}`;
+  const rect = document.getElementById('circuit-panel').getBoundingClientRect();
+  tt.style.left = (e.clientX - rect.left + 12) + 'px';
+  tt.style.top  = (e.clientY - rect.top - 20) + 'px';
+  tt.style.display = 'block';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ALERT HELPERS
+// ═══════════════════════════════════════════════════════════════════════
+function showAlert(msg, bg='#a01020') {
+  const b = document.getElementById('alert-banner');
+  b.textContent = msg; b.style.background = bg;
+  b.classList.add('active');
+}
+function hideAlert() { document.getElementById('alert-banner').classList.remove('active'); }
+
+// ═══════════════════════════════════════════════════════════════════════
+// S9: DEMO MODE
+// ═══════════════════════════════════════════════════════════════════════
+function handleDemoMode() {
+  if (RS.demoRunning) return;
+  RS.demoRunning = true;
+  handleReset();
+  document.getElementById('follow-sel').value = 'AE-MK4-001';
+  RS.followId = 'AE-MK4-001';
+  setTimeout(() => handleStart(), 400);
+  setTimeout(() => { showAlert('🎬 DEMO MODE — Watch live MRSSP scoring in action', '#0D3A1A'); }, 600);
+  setTimeout(() => hideAlert(), 4200);
+  setTimeout(() => triggerAbort(null), 12000);
+  setTimeout(() => { if (!RS.running) handleStart(); }, 18500);
+  setTimeout(() => handleForceGate(), 22000);
+  setTimeout(() => {
+    showAlert('🎬 DEMO COMPLETE — All systems nominal · AAMI certification logged', '#0D3A1A');
+    setTimeout(() => { hideAlert(); RS.demoRunning = false; }, 3500);
+  }, 26000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S9: RESPONSIVE CHECK
+// ═══════════════════════════════════════════════════════════════════════
+function chkWidth() {
+  document.getElementById('width-warning').style.display = window.innerWidth < 1200 ? 'flex' : 'none';
+}
+window.addEventListener('resize', chkWidth);
+chkWidth();
+
+// ═══════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  buildCircuit();
+  requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>

@@ -14,12 +14,14 @@ export const VEHICLE_CONFIGS = [
 const BASE_SPD = 0.055;
 
 // ─── Gate Definitions ─────────────────────────────────────────────────────
+// t-values calibrated to the 21-point lollipop curve (20 segments, step=0.05)
+// pt0=START(t=0) pt2=ring-entry(t=0.10) pt6=apex-A(t=0.30) pt14=apex-B(t=0.70) pt18=ring-exit(t=0.90)
 export const GATE_DEFS = [
   { id: 'G1', name: 'START / FINISH', t: 0.00, color: '#00FF88', missionPhase: 'Race Start — Data Capture' },
-  { id: 'G2', name: 'Sector 1 Entry', t: 0.20, color: '#00D4FF', missionPhase: 'Technical Zone — Assessment' },
-  { id: 'G3', name: 'Apex A',         t: 0.35, color: '#FF6B00', missionPhase: 'Power Sector — Execution' },
-  { id: 'G4', name: 'Apex B',         t: 0.65, color: '#FF6B00', missionPhase: 'Strategy — Road-Map' },
-  { id: 'G5', name: 'Ring Exit',      t: 0.80, color: '#00D4FF', missionPhase: 'Final Push — Optimization' },
+  { id: 'G2', name: 'Sector 1 Entry', t: 0.10, color: '#00D4FF', missionPhase: 'Technical Zone — Assessment' },
+  { id: 'G3', name: 'Apex A',         t: 0.30, color: '#FF6B00', missionPhase: 'Power Sector — Execution' },
+  { id: 'G4', name: 'Apex B',         t: 0.70, color: '#FF6B00', missionPhase: 'Strategy — Road-Map' },
+  { id: 'G5', name: 'Ring Exit',      t: 0.90, color: '#00D4FF', missionPhase: 'Final Push — Optimization' },
 ] as const;
 
 // ─── Types ────────────────────────────────────────────────────────────────

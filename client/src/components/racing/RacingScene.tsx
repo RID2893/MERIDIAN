@@ -1,7 +1,6 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { OrbitControls, Grid } from "@react-three/drei";
-import * as THREE from "three";
 import { useRacing } from "@/lib/stores/useRacing";
 import { RacingTrack } from "./RacingTrack";
 import { RacingGates } from "./RacingGates";

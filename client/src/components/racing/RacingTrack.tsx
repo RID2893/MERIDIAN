@@ -19,15 +19,19 @@ function makeLollipopPoints(altY: number): THREE.Vector3[] {
   pts.push(new THREE.Vector3(0, altY, 0));                      // t≈0.20 ring entry
 
   // ── Ring: clockwise from bottom (south) going right (east) ──
-  const steps = 16; // points around the ring
+  // Formula: z = CENTER_Z + R*cos(angle)  → at angle=0 gives z=CENTER_Z+R=0 (entry)
+  //                                         at angle=π gives z=CENTER_Z-R=-10 (top)
+  //                                         at angle=2π gives z=CENTER_Z+R=0 (exit = entry)
+  // ⚠ Must use +cos NOT -cos — -cos creates a duplicate point at angle=π which
+  //   makes the CatmullRom tangent zero → TubeGeometry NaN normals → crash.
+  const steps = 16;
   for (let i = 1; i <= steps; i++) {
-    const angle = (i / steps) * Math.PI * 2;  // 0 → 2π clockwise
+    const angle = (i / steps) * Math.PI * 2;
     const x = RING_R * Math.sin(angle);
-    const z = RING_CENTER_Z + RING_R * -Math.cos(angle); // starts at bottom (z=0)
+    const z = RING_CENTER_Z + RING_R * Math.cos(angle);  // +cos ← CORRECT
     pts.push(new THREE.Vector3(x, altY, z));
   }
-  // ── last ring point brings us back to ring entry ──
-  pts.push(new THREE.Vector3(0, altY, 0));                      // ring exit
+  // i=16 at angle=2π already returns to [0, altY, 0] — no explicit ring exit needed
 
   // ── Return straight: ring exit → START/FINISH ──
   pts.push(new THREE.Vector3(0, altY, STRAIGHT_LEN * 0.5));     // mid-straight return

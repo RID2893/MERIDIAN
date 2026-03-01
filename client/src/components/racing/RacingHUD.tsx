@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { useLocation } from "wouter";
-import { useRacing, VEHICLE_CONFIGS } from "@/lib/stores/useRacing";
+import { useRacing } from "@/lib/stores/useRacing";
 
 // ─── Colour helpers ────────────────────────────────────────────────────────
 function scoreColor(v: number): string {

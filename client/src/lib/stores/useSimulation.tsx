@@ -14,6 +14,8 @@ export type PipelineName = "N-S-CENTER" | "N-S-TOP" | "N-S-BOTTOM" | "E-W-CENTER
 export type ScenarioName = "normal" | "rush_hour" | "maintenance" | "emergency";
 export type RingLevel = 1 | 2 | 3;
 export type OperatorCode = 'AR' | 'JB' | 'WK' | 'BT' | 'LL' | 'VL';
+export type FuelType = 'electric' | 'hydrogen' | 'jetFuel';
+export type DAOProposalStatus = 'active' | 'passed' | 'failed';
 
 // Meridian Ring Operation Volume Structure (FAA RFI aligned)
 export const RING_CONFIGS: Record<RingLevel, { radius: number; altitude: number; color: number }> = {
@@ -134,6 +136,8 @@ export interface Aircraft {
   originCity: CityName | null;
   ringLevel: RingLevel;
   operator: OperatorCode;
+  fuelType: FuelType;
+  batterySOC: number;   // 0–100 for electric; 100 for hydrogen/jetFuel
 }
 
 export interface Pipeline {
@@ -228,6 +232,63 @@ export interface StatisticsSnapshot {
   reroutings: number;
 }
 
+// ── Energy System (FAA RFI System Integration — Pillar 3) ──────────────────
+// Grid capacity 3.5 MW; fuel mix: 60% electric / 25% hydrogen / 15% jet
+export interface EnergyOracle {
+  gridCapacityMW: number;        // constant 3.5
+  gridDemandMW: number;          // 0–3.5, updated each tick
+  electricGridPct: number;       // 0–100 (grid utilization %)
+  jetFuelSupplyGalHr: number;    // 0–600 max gal/hr
+  hydrogenSupplyKgHr: number;    // 0–150 max kg/hr
+}
+
+export interface FleetMix {
+  electricPct: number;   // 60% target
+  hydrogenPct: number;   // 25% target
+  jetFuelPct: number;    // 15% target
+}
+
+// ── DAO Governance (FAA RFI 8-Pillar — Pillar 1 + 4) ─────────────────────
+// Demo-compressed timers: 14s = "14-day" / 30s = "30-min emergency"
+export interface DAOProposal {
+  id: string;
+  title: string;
+  description: string;
+  yesVotes: number;
+  noVotes: number;
+  timeRemaining: number;     // seconds (compressed demo time)
+  status: DAOProposalStatus;
+  emergencyVote?: boolean;
+}
+
+const SEED_PROPOSALS: DAOProposal[] = [
+  {
+    id: 'DAO-001',
+    title: 'Expand Network to San Francisco',
+    description: 'SFO/SJC metro pilot. 14-day standard vote. Requires FAA waiver amendment.',
+    yesVotes: 47, noVotes: 12,
+    timeRemaining: 14,
+    status: 'active',
+  },
+  {
+    id: 'DAO-002',
+    title: 'TOP Pipeline Capacity +25%',
+    description: 'Emergency overflow capacity expansion during CENTER pipeline saturation.',
+    yesVotes: 31, noVotes: 8,
+    timeRemaining: 30,
+    status: 'active',
+    emergencyVote: true,
+  },
+  {
+    id: 'DAO-003',
+    title: 'Electric Fleet Energy Subsidy',
+    description: 'Reduce energy surcharge by $0.50 for 100% electric operators. Incentivizes clean fleet transition.',
+    yesVotes: 22, noVotes: 35,
+    timeRemaining: 14,
+    status: 'active',
+  },
+];
+
 export interface SimulationState {
   isPlaying: boolean;
   speed: number;
@@ -260,6 +321,14 @@ export interface SimulationState {
   // Pipeline overflow tracking (CENTER >85% utilization triggers TOP overflow)
   centerPipelineUtilizationPct: number;  // 0–100
   topPipelineOverflowActive: boolean;
+
+  // Energy system
+  energyOracle: EnergyOracle;
+  fleetMix: FleetMix;
+
+  // DAO governance
+  daoProposals: DAOProposal[];
+  voteOnProposal: (proposalId: string, vote: 'yes' | 'no') => void;
 
   play: () => void;
   pause: () => void;
@@ -328,6 +397,18 @@ const CORRIDOR_ALTITUDES = {
   'E-W': { base: 550, dirOffset: 100 },  // EB 550ft, WB 650ft
 };
 
+// Fuel type distribution: 60% electric / 25% hydrogen / 15% jet fuel (per FAA RFI System Integration)
+function assignFuelType(index: number): FuelType {
+  const r = index % 20;
+  if (r < 12) return 'electric';
+  if (r < 17) return 'hydrogen';
+  return 'jetFuel';
+}
+
+function assignBatterySOC(fuelType: FuelType): number {
+  return fuelType === 'electric' ? 60 + Math.floor(Math.random() * 40) : 100;
+}
+
 function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal): Aircraft[] {
   const aircraft: Aircraft[] = [];
   let id = 1;
@@ -338,6 +419,7 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
     const ring = ringPattern[i % ringPattern.length];
     const rc = RING_CONFIGS[ring];
     const op = OPERATOR_CODES[i % OPERATOR_CODES.length];
+    const ft = assignFuelType(id);
     aircraft.push({
       id: `AC-${String(id++).padStart(3, "0")}`,
       status: "in_ring",
@@ -354,6 +436,8 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
       originCity: "San Diego",
       ringLevel: ring,
       operator: op,
+      fuelType: ft,
+      batterySOC: assignBatterySOC(ft),
     });
   }
 
@@ -361,6 +445,7 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
     const ring = ringPattern[i % ringPattern.length];
     const rc = RING_CONFIGS[ring];
     const op = OPERATOR_CODES[(i + 3) % OPERATOR_CODES.length]; // Offset for diversity
+    const ft = assignFuelType(id);
     aircraft.push({
       id: `AC-${String(id++).padStart(3, "0")}`,
       status: "in_ring",
@@ -377,6 +462,8 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
       originCity: "Orange County",
       ringLevel: ring,
       operator: op,
+      fuelType: ft,
+      batterySOC: assignBatterySOC(ft),
     });
   }
   
@@ -388,6 +475,7 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
     for (let i = 0; i < aircraftPerVariant; i++) {
       const op = OPERATOR_CODES[(id) % OPERATOR_CODES.length];
       const nsAlt = (CORRIDOR_ALTITUDES['N-S'].base / 1250) * 2 + variantAltOffsets[variant];
+      const ft = assignFuelType(id);
       aircraft.push({
         id: `AC-${String(id++).padStart(3, "0")}`,
         status: "in_pipeline",
@@ -404,6 +492,8 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
         originCity: "San Diego",
         ringLevel: 2,
         operator: op,
+        fuelType: ft,
+        batterySOC: assignBatterySOC(ft),
       });
     }
   });
@@ -412,6 +502,7 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
     for (let i = 0; i < aircraftPerVariant; i++) {
       const op = OPERATOR_CODES[(id) % OPERATOR_CODES.length];
       const ewAlt = (CORRIDOR_ALTITUDES['E-W'].base / 1250) * 2 + variantAltOffsets[variant];
+      const ft = assignFuelType(id);
       aircraft.push({
         id: `AC-${String(id++).padStart(3, "0")}`,
         status: "in_pipeline",
@@ -428,6 +519,8 @@ function createInitialAircraft(config: ScenarioConfig = SCENARIO_CONFIGS.normal)
         originCity: "San Diego",
         ringLevel: 2,
         operator: op,
+        fuelType: ft,
+        batterySOC: assignBatterySOC(ft),
       });
     }
   });
@@ -538,6 +631,16 @@ export const useSimulation = create<SimulationState>()(
     centerPipelineUtilizationPct: 0,
     topPipelineOverflowActive: false,
 
+    energyOracle: {
+      gridCapacityMW: 3.5,
+      gridDemandMW: 2.1,
+      electricGridPct: 60,
+      jetFuelSupplyGalHr: 520,
+      hydrogenSupplyKgHr: 118,
+    },
+    fleetMix: { electricPct: 60, hydrogenPct: 25, jetFuelPct: 15 },
+    daoProposals: SEED_PROPOSALS.map(p => ({ ...p })),
+
     play: () => {
       set({ isPlaying: true });
       get().addEvent("Simulation started", "info");
@@ -579,6 +682,9 @@ export const useSimulation = create<SimulationState>()(
         blockchain: [],
         centerPipelineUtilizationPct: 0,
         topPipelineOverflowActive: false,
+        energyOracle: { gridCapacityMW: 3.5, gridDemandMW: 2.1, electricGridPct: 60, jetFuelSupplyGalHr: 520, hydrogenSupplyKgHr: 118 },
+        fleetMix: { electricPct: 60, hydrogenPct: 25, jetFuelPct: 15 },
+        daoProposals: SEED_PROPOSALS.map(p => ({ ...p })),
       });
     },
 
@@ -618,6 +724,9 @@ export const useSimulation = create<SimulationState>()(
         blockchain: [],
         centerPipelineUtilizationPct: 0,
         topPipelineOverflowActive: false,
+        energyOracle: { gridCapacityMW: 3.5, gridDemandMW: 2.1, electricGridPct: 60, jetFuelSupplyGalHr: 520, hydrogenSupplyKgHr: 118 },
+        fleetMix: { electricPct: 60, hydrogenPct: 25, jetFuelPct: 15 },
+        daoProposals: SEED_PROPOSALS.map(p => ({ ...p })),
       });
       get().addEvent(`Scenario changed to: ${config.name}`, "info");
       if (config.alertMessage) {
@@ -637,6 +746,17 @@ export const useSimulation = create<SimulationState>()(
       } else {
         get().addEvent("FAA Emergency Override deactivated — Normal operations", "info");
       }
+    },
+
+    voteOnProposal: (proposalId: string, vote: 'yes' | 'no') => {
+      set((state) => ({
+        daoProposals: state.daoProposals.map(p =>
+          p.id === proposalId
+            ? { ...p, yesVotes: vote === 'yes' ? p.yesVotes + 1 : p.yesVotes, noVotes: vote === 'no' ? p.noVotes + 1 : p.noVotes }
+            : p
+        ),
+      }));
+      get().addEvent(`DAO vote recorded: ${vote.toUpperCase()} on ${proposalId}`, "info");
     },
 
     approveFlightRequest: (requestId: string) => {
@@ -775,6 +895,7 @@ export const useSimulation = create<SimulationState>()(
                 const spawnRing: RingLevel = ([1, 2, 2, 2, 3, 3] as RingLevel[])[Math.floor(Math.random() * 6)];
                 const spawnCfg = RING_CONFIGS[spawnRing];
                 const spawnOp = OPERATOR_CODES[Math.floor(Math.random() * OPERATOR_CODES.length)];
+                const spawnFt = assignFuelType(Math.floor(Math.random() * 20));
                 state.addAircraft({
                   id,
                   status: "in_ring",
@@ -791,6 +912,8 @@ export const useSimulation = create<SimulationState>()(
                   originCity: origin,
                   ringLevel: spawnRing,
                   operator: spawnOp,
+                  fuelType: spawnFt,
+                  batterySOC: assignBatterySOC(spawnFt),
                 });
               }
             }
@@ -1204,6 +1327,67 @@ export const useSimulation = create<SimulationState>()(
             const centerCapacity = centerPipelines.reduce((sum, p) => sum + p.capacity, 0);
             const pct = centerCapacity > 0 ? Math.round((centerAircraftCount / centerCapacity) * 100) : 0;
             return { centerPipelineUtilizationPct: pct, topPipelineOverflowActive: pct >= 85 };
+          })(),
+
+          // ── Energy Oracle update ─────────────────────────────────────────
+          ...(() => {
+            const prev = prevState.energyOracle;
+            // Target demand scales with fleet size (full 200-ac fleet = 3.5 MW)
+            const targetDemand = Math.min(3.5, 0.5 + (updatedAircraft.length / 200) * 3.0);
+            const drift = (targetDemand - prev.gridDemandMW) * 0.02 + (Math.random() - 0.5) * 0.04;
+            const newDemand = Math.max(0.1, Math.min(3.5, prev.gridDemandMW + drift * adjustedDelta));
+            const newJet = Math.max(200, Math.min(600, prev.jetFuelSupplyGalHr + (Math.random() - 0.5) * 8 * adjustedDelta));
+            const newH2  = Math.max(50,  Math.min(150, prev.hydrogenSupplyKgHr  + (Math.random() - 0.5) * 4 * adjustedDelta));
+            return {
+              energyOracle: {
+                gridCapacityMW: 3.5,
+                gridDemandMW: parseFloat(newDemand.toFixed(2)),
+                electricGridPct: Math.round((newDemand / 3.5) * 100),
+                jetFuelSupplyGalHr: Math.round(newJet),
+                hydrogenSupplyKgHr: Math.round(newH2),
+              },
+            };
+          })(),
+
+          // ── Fleet mix update ─────────────────────────────────────────────
+          ...(() => {
+            const total = updatedAircraft.length || 1;
+            const elec = updatedAircraft.filter(a => a.fuelType === 'electric').length;
+            const h2   = updatedAircraft.filter(a => a.fuelType === 'hydrogen').length;
+            const jet  = total - elec - h2;
+            return {
+              fleetMix: {
+                electricPct: Math.round((elec / total) * 100),
+                hydrogenPct: Math.round((h2 / total) * 100),
+                jetFuelPct:  Math.round((jet / total) * 100),
+              },
+            };
+          })(),
+
+          // ── DAO proposal countdown ───────────────────────────────────────
+          ...(() => {
+            const updatedProposals = prevState.daoProposals.map(p => {
+              if (p.status !== 'active') return p;
+              const newTime = p.timeRemaining - adjustedDelta;
+              if (newTime <= 0) {
+                return { ...p, timeRemaining: 0, status: (p.yesVotes >= p.noVotes ? 'passed' : 'failed') as DAOProposalStatus };
+              }
+              return { ...p, timeRemaining: newTime };
+            });
+            // Auto-spawn emergency vote if FAA override is active and no emergency vote running
+            const hasEmergency = updatedProposals.some(p => p.emergencyVote && p.status === 'active');
+            const finalProposals = (state.emergencyOverride && !hasEmergency)
+              ? [...updatedProposals, {
+                  id: `DAO-EMG-${Date.now().toString().slice(-4)}`,
+                  title: 'FAA Override — Emergency Authority',
+                  description: 'Confirm FAA emergency override continuation. 30-sec emergency vote.',
+                  yesVotes: 0, noVotes: 0,
+                  timeRemaining: 30,
+                  status: 'active' as DAOProposalStatus,
+                  emergencyVote: true,
+                }]
+              : updatedProposals;
+            return { daoProposals: finalProposals.slice(0, 6) };
           })(),
         };
       });

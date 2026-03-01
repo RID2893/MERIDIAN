@@ -274,6 +274,8 @@ function AirspaceTab() {
   const pipelines = useSimulation((state) => state.pipelines);
   const centerPipelineUtilizationPct = useSimulation((state) => state.centerPipelineUtilizationPct);
   const topPipelineOverflowActive = useSimulation((state) => state.topPipelineOverflowActive);
+  const energyOracle = useSimulation((state) => state.energyOracle);
+  const fleetMix = useSimulation((state) => state.fleetMix);
 
   const ringCounts = (city: string) =>
     ([1, 2, 3] as RingLevel[]).map((r) => ({
@@ -351,6 +353,57 @@ function AirspaceTab() {
           );
         })}
       </Section>
+
+      {/* ── ENERGY GRID (Sprint 9 — FAA RFI System Integration Pillar 3) ── */}
+      <Section label="ENERGY GRID" accentColor="#00ff88">
+        {/* Energy alert banner */}
+        {energyOracle.electricGridPct >= 91 && (
+          <div style={{
+            background: "rgba(255,80,0,0.15)", border: "1px solid #ff5500",
+            color: "#ff7722", padding: "4px 8px", borderRadius: "3px",
+            fontSize: "9px", fontFamily: "'Orbitron', monospace",
+            letterSpacing: "1px", marginBottom: "8px",
+            animation: "pulse 1s infinite",
+          }}>
+            ⚡ ENERGY ALERT — Prioritizing electric fleet
+          </div>
+        )}
+
+        {/* Grid demand bar */}
+        <div style={{ marginBottom: "8px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginBottom: "3px" }}>
+            <span style={{ color: "#888" }}>GRID DEMAND</span>
+            <span style={{ color: energyOracle.electricGridPct >= 91 ? "#ff5500" : energyOracle.electricGridPct >= 70 ? "#ffaa00" : "#00ff88" }}>
+              {energyOracle.gridDemandMW.toFixed(1)} / {energyOracle.gridCapacityMW.toFixed(1)} MW
+            </span>
+          </div>
+          <div style={{ background: "#1a1a2e", borderRadius: "2px", height: "5px" }}>
+            <div style={{
+              background: energyOracle.electricGridPct >= 91 ? "#ff4400" : energyOracle.electricGridPct >= 70 ? "#ffaa00" : "#00ff88",
+              width: `${Math.min(energyOracle.electricGridPct, 100)}%`,
+              height: "100%", borderRadius: "2px",
+              boxShadow: `0 0 6px ${energyOracle.electricGridPct >= 91 ? "#ff4400" : "#00ff88"}`,
+              transition: "width 0.5s ease",
+            }} />
+          </div>
+        </div>
+
+        {/* Fuel supply rows */}
+        {[
+          { label: "ELEC", color: "#00ff88", pct: fleetMix.electricPct, sub: `${energyOracle.electricGridPct}% grid` },
+          { label: "H₂",   color: "#4488ff", pct: fleetMix.hydrogenPct, sub: `${energyOracle.hydrogenSupplyKgHr} kg/hr` },
+          { label: "JET",  color: "#ff8800", pct: fleetMix.jetFuelPct,  sub: `${energyOracle.jetFuelSupplyGalHr} gal/hr` },
+        ].map(({ label, color, pct, sub }) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "5px" }}>
+            <span style={{ color, fontSize: "9px", fontFamily: "'Orbitron', monospace", width: "28px", flexShrink: 0 }}>{label}</span>
+            <div style={{ flex: 1, background: "#1a1a2e", borderRadius: "2px", height: "3px" }}>
+              <div style={{ background: color, width: `${pct}%`, height: "100%", borderRadius: "2px" }} />
+            </div>
+            <span style={{ color: "#888", fontSize: "9px", width: "52px", textAlign: "right" }}>{sub}</span>
+            <span style={{ color, fontSize: "9px", width: "26px", textAlign: "right" }}>{pct}%</span>
+          </div>
+        ))}
+      </Section>
     </div>
   );
 }
@@ -381,6 +434,9 @@ function OpsTab() {
   const denyFlightRequest = useSimulation((state) => state.denyFlightRequest);
   const weatherGrounded = useSimulation((state) => state.weatherGrounded);
   const events = useSimulation((state) => state.events);
+  const daoProposals = useSimulation((state) => state.daoProposals);
+  const voteOnProposal = useSimulation((state) => state.voteOnProposal);
+  const emergencyOverride = useSimulation((state) => state.emergencyOverride);
 
   const pendingRequests = flightQueue.filter((r) => r.status === "HOLD" || r.status === "PENDING");
 
@@ -462,6 +518,75 @@ function OpsTab() {
         <div style={{ borderTop: "1px solid #333", paddingTop: "4px", marginTop: "4px" }}>
           <StatRow label="Total Throughput" value={throughput} color="#00ffff" />
         </div>
+      </Section>
+
+      {/* ── DAO GOVERNANCE (Sprint 9 — 8-Pillar Philosophy, Pillars 1 + 4) ── */}
+      <Section label="DAO GOVERNANCE" accentColor="#aa44ff">
+        {emergencyOverride && (
+          <div style={{
+            background: "rgba(255,80,0,0.15)", border: "1px solid #ff5500",
+            color: "#ff7722", padding: "3px 8px", borderRadius: "3px",
+            fontSize: "9px", fontFamily: "'Orbitron', monospace",
+            marginBottom: "8px", animation: "pulse 0.5s infinite",
+          }}>
+            ⚡ FAA OVERRIDE ACTIVE — Emergency vote triggered
+          </div>
+        )}
+        {daoProposals.map((proposal) => {
+          const total = proposal.yesVotes + proposal.noVotes || 1;
+          const yesPct = Math.round((proposal.yesVotes / total) * 100);
+          const expired = proposal.status !== 'active';
+          const timerColor = proposal.timeRemaining < 5 ? "#ff4444" : proposal.timeRemaining < 10 ? "#ffaa00" : "#00ffcc";
+          const statusColor = proposal.status === 'passed' ? "#00ff88" : proposal.status === 'failed' ? "#ff4444" : "#aa44ff";
+          return (
+            <div key={proposal.id} style={{
+              background: expired ? "rgba(255,255,255,0.03)" : proposal.emergencyVote ? "rgba(255,80,0,0.08)" : "rgba(170,68,255,0.06)",
+              border: `1px solid ${expired ? "#333" : proposal.emergencyVote ? "#ff550055" : "#aa44ff33"}`,
+              borderRadius: "4px", padding: "8px", marginBottom: "7px",
+              opacity: expired ? 0.65 : 1,
+            }}>
+              {/* Header row */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "3px" }}>
+                <span style={{ color: proposal.emergencyVote ? "#ff7722" : "#cc88ff", fontSize: "9px", fontFamily: "'Orbitron', monospace", letterSpacing: "0.5px", maxWidth: "160px", lineHeight: 1.3 }}>
+                  {proposal.emergencyVote && "⚡ "}{proposal.title}
+                </span>
+                {expired ? (
+                  <span style={{ color: statusColor, fontSize: "8px", fontFamily: "'Orbitron', monospace", border: `1px solid ${statusColor}`, padding: "1px 5px", borderRadius: "2px", flexShrink: 0, marginLeft: "4px" }}>
+                    {proposal.status.toUpperCase()}
+                  </span>
+                ) : (
+                  <span style={{ color: timerColor, fontSize: "9px", fontFamily: "'Courier New', monospace", flexShrink: 0, marginLeft: "4px" }}>
+                    ⏱ {proposal.timeRemaining.toFixed(0)}s
+                  </span>
+                )}
+              </div>
+              {/* Description */}
+              <div style={{ color: "#777", fontSize: "9px", marginBottom: "6px", lineHeight: 1.4 }}>{proposal.description}</div>
+              {/* Vote bar */}
+              <div style={{ marginBottom: "5px" }}>
+                <div style={{ display: "flex", height: "4px", borderRadius: "2px", overflow: "hidden", background: "#1a1a2e" }}>
+                  <div style={{ width: `${yesPct}%`, background: "#00ff88", transition: "width 0.4s" }} />
+                  <div style={{ flex: 1, background: "#ff4444" }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "9px", marginTop: "2px" }}>
+                  <span style={{ color: "#00ff88" }}>FOR {proposal.yesVotes} ({yesPct}%)</span>
+                  <span style={{ color: "#ff4444" }}>AGAINST {proposal.noVotes} ({100 - yesPct}%)</span>
+                </div>
+              </div>
+              {/* Vote buttons (only while active) */}
+              {!expired && (
+                <div style={{ display: "flex", gap: "5px" }}>
+                  <button onClick={() => voteOnProposal(proposal.id, 'yes')} style={{ flex: 1, padding: "3px", background: "rgba(0,255,136,0.1)", border: "1px solid #00ff88", color: "#00ff88", borderRadius: "3px", cursor: "pointer", fontSize: "8px", fontFamily: "'Orbitron', monospace" }}>
+                    FOR
+                  </button>
+                  <button onClick={() => voteOnProposal(proposal.id, 'no')} style={{ flex: 1, padding: "3px", background: "rgba(255,68,68,0.1)", border: "1px solid #ff4444", color: "#ff4444", borderRadius: "3px", cursor: "pointer", fontSize: "8px", fontFamily: "'Orbitron', monospace" }}>
+                    AGAINST
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </Section>
 
       {/* Event Log */}

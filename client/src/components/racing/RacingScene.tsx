@@ -48,7 +48,6 @@ export function RacingScene() {
       {/* Grid */}
       <Grid
         position={[0, -0.04, -2.5]}
-        args={[40, 32]}
         cellSize={1}
         cellThickness={0.4}
         cellColor="#0d1a35"

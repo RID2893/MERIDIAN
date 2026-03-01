@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useLocation } from "wouter";
 import { useRacing, VEHICLE_CONFIGS } from "@/lib/stores/useRacing";
 
@@ -22,7 +23,7 @@ function fmtHMS(s: number): string {
 }
 
 // ─── Shared card style ────────────────────────────────────────────────────
-const CARD: React.CSSProperties = {
+const CARD: CSSProperties = {
   background: '#0D1A35',
   border: '1px solid #1A2A4A',
   borderRadius: '6px',
@@ -30,7 +31,7 @@ const CARD: React.CSSProperties = {
   marginBottom: '8px',
 };
 
-const SECTION_TITLE: React.CSSProperties = {
+const SECTION_TITLE: CSSProperties = {
   color: '#00D4FF',
   fontSize: '9px',
   letterSpacing: '2px',
@@ -238,7 +239,7 @@ function ControlBar() {
     onClick: () => void,
     color = '#00D4FF',
     disabled = false,
-  ): React.ReactElement => (
+  ): JSX.Element => (
     <button
       onClick={onClick}
       disabled={disabled}

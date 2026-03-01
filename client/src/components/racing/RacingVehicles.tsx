@@ -29,7 +29,11 @@ function Vehicle({ vehicleId }: { vehicleId: string }) {
     return geo;
   }, []);
 
-  const colorHex = useMemo(() => new THREE.Color(cfg.color), [cfg.color]);
+  const colorHex  = useMemo(() => new THREE.Color(cfg.color), [cfg.color]);
+  const trailLine  = useMemo(() => new THREE.Line(
+    trailGeo,
+    new THREE.LineBasicMaterial({ color: cfg.color, transparent: true, opacity: 0.4 }),
+  ), [trailGeo, cfg.color]);
 
   const { showClassA, showClassB, followedId } = useRacing(s => ({
     showClassA: s.showClassA,
@@ -129,11 +133,7 @@ function Vehicle({ vehicleId }: { vehicleId: string }) {
       />
 
       {/* Trail line (only rendered for followed vehicle) */}
-      <primitive object={new THREE.Line(trailGeo, new THREE.LineBasicMaterial({
-        color: cfg.color,
-        transparent: true,
-        opacity: 0.4,
-      }))} ref={trailRef} />
+      <primitive object={trailLine} ref={trailRef} />
     </group>
   );
 }

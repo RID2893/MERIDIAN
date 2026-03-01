@@ -339,6 +339,7 @@ export interface SimulationState {
   toggleEmergencyOverride: () => void;
   approveFlightRequest: (requestId: string) => void;
   denyFlightRequest: (requestId: string) => void;
+  requestFlight: (operator: OperatorCode, origin: CityName, destination: CityName, priority?: 'NORMAL' | 'PRIORITY' | 'EMERGENCY') => string;
   
   addAircraft: (aircraft: Aircraft) => void;
   updateAircraft: (id: string, updates: Partial<Aircraft>) => void;
@@ -775,6 +776,24 @@ export const useSimulation = create<SimulationState>()(
         ),
       }));
       get().addEvent(`Flight request ${requestId} DENIED`, "warning");
+    },
+
+    requestFlight: (operator, origin, destination, priority = 'NORMAL') => {
+      const id = `FRQ-${Date.now().toString().slice(-6)}`;
+      const req: FlightRequest = {
+        id,
+        aircraftId: `AC-${Math.floor(Math.random() * 999).toString().padStart(3, '0')}`,
+        operator,
+        origin,
+        destination,
+        requestedTime: new Date(get().simulationTime),
+        status: 'PENDING',
+        priority,
+        reason: 'Pilot request via mobile app',
+      };
+      set((state) => ({ flightQueue: [...state.flightQueue, req].slice(-20) }));
+      get().addEvent(`Flight request ${id} submitted by ${operator}: ${origin} → ${destination}`, "info");
+      return id;
     },
 
     addAircraft: (aircraft: Aircraft) => {

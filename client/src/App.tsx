@@ -6,6 +6,7 @@ import "@fontsource/inter";
 import { Scene } from "./components/game/Scene";
 import { HUD } from "./components/game/HUD";
 import { Demo } from "./pages/Demo";
+import { PilotApp } from "./pages/PilotApp";
 
 function LoadingScreen() {
   return (
@@ -85,6 +86,7 @@ function App() {
   return (
     <Switch>
       <Route path="/demo" component={Demo} />
+      <Route path="/pilot" component={PilotApp} />
       <Route component={Simulator} />
     </Switch>
   );

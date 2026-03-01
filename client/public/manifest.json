@@ -1,0 +1,26 @@
+{
+  "name": "MERIDIAN Pilot",
+  "short_name": "MRSS Pilot",
+  "description": "eVTOL pilot operations app — Meridian Ring Scheduling System",
+  "start_url": "/pilot",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000d1a",
+  "theme_color": "#00ffff",
+  "icons": [
+    {
+      "src": "/textures/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/textures/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["aviation", "navigation", "utilities"],
+  "lang": "en-US"
+}

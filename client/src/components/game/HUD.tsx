@@ -65,6 +65,25 @@ function Header() {
         >
           ▶ DEMO
         </button>
+        <button
+          onClick={() => navigate("/pilot")}
+          style={{
+            background: "rgba(0,255,136,0.08)",
+            border: "1px solid rgba(0,255,136,0.3)",
+            color: "#00ff88",
+            padding: "4px 14px",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "9px",
+            letterSpacing: "2px",
+            fontFamily: "'Orbitron', monospace",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.background = "rgba(0,255,136,0.18)"; }}
+          onMouseLeave={(e) => { (e.target as HTMLButtonElement).style.background = "rgba(0,255,136,0.08)"; }}
+        >
+          ✈ PILOT
+        </button>
         <div className="time-display">
           <span>{formattedDate}</span>
           <span style={{ marginLeft: "12px" }}>{formattedTime}</span>

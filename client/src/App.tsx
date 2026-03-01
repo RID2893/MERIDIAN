@@ -7,6 +7,7 @@ import { Scene } from "./components/game/Scene";
 import { HUD } from "./components/game/HUD";
 import { Demo } from "./pages/Demo";
 import { PilotApp } from "./pages/PilotApp";
+import { OperatorDashboard } from "./pages/OperatorDashboard";
 
 function LoadingScreen() {
   return (
@@ -87,6 +88,7 @@ function App() {
     <Switch>
       <Route path="/demo" component={Demo} />
       <Route path="/pilot" component={PilotApp} />
+      <Route path="/operator" component={OperatorDashboard} />
       <Route component={Simulator} />
     </Switch>
   );

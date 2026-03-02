@@ -226,7 +226,7 @@ function CapacityWarnings() {
 }
 
 // ─────────────────────────────────────────────
-// Always-visible: ControlPanel (bottom strip)
+// Always-visible: ControlPanel (left sidebar)
 // ─────────────────────────────────────────────
 function ControlPanel() {
   const { isPlaying, speed, play, pause, reset, setSpeed, selectedScenario, setScenario } = useSimulation();
@@ -235,45 +235,114 @@ function ControlPanel() {
   const weatherGrounded = useSimulation((state) => state.weatherGrounded);
   const config = SCENARIO_CONFIGS[selectedScenario as ScenarioName];
 
+  const sectionLabel = (text: string) => (
+    <div style={{
+      color: "#00ffff",
+      fontSize: "8px",
+      letterSpacing: "2px",
+      fontFamily: "'Orbitron', monospace",
+      opacity: 0.6,
+      marginBottom: "6px",
+    }}>
+      {text}
+    </div>
+  );
+
+  const divider = (
+    <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "10px 0" }} />
+  );
+
   return (
-    <div className="control-panel" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-      <div className="control-group">
-        {isPlaying ? <button onClick={pause}>Pause</button> : <button onClick={play}>Play</button>}
-        <button onClick={reset}>Reset</button>
+    <div className="control-panel">
+
+      {/* ── Playback ── */}
+      {sectionLabel("PLAYBACK")}
+      <div style={{ display: "flex", gap: "6px" }}>
+        {isPlaying
+          ? <button onClick={pause}  style={{ flex: 1, padding: "6px 4px", fontSize: "11px" }}>Pause</button>
+          : <button onClick={play}   style={{ flex: 1, padding: "6px 4px", fontSize: "11px" }}>Play</button>
+        }
+        <button onClick={reset} style={{ flex: 1, padding: "6px 4px", fontSize: "11px" }}>Reset</button>
       </div>
-      <div className="control-group">
-        <span className="control-label">Speed:</span>
+
+      {divider}
+
+      {/* ── Speed ── */}
+      {sectionLabel("SPEED")}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px" }}>
         {[1, 2, 4, 10].map((s) => (
-          <button key={s} className={`speed-btn ${speed === s ? "active" : ""}`} onClick={() => setSpeed(s)}>{s}x</button>
+          <button
+            key={s}
+            className={`speed-btn ${speed === s ? "active" : ""}`}
+            onClick={() => setSpeed(s)}
+            style={{ padding: "5px 0", fontSize: "11px", minWidth: "unset" }}
+          >
+            {s}x
+          </button>
         ))}
       </div>
-      <div className="control-group scenario-group">
-        <span className="control-label">Scenario:</span>
-        <select value={selectedScenario} onChange={(e) => setScenario(e.target.value)}>
-          <option value="normal">Normal Operations</option>
-          <option value="rush_hour">Rush Hour</option>
-          <option value="maintenance">Scheduled Maintenance</option>
-          <option value="emergency">Emergency Response</option>
-        </select>
-        <span className="scenario-description">{config?.description}</span>
-      </div>
-      {/* Emergency override inline */}
-      <div className="control-group">
-        <button
-          onClick={toggleEmergencyOverride}
-          style={{
-            background: emergencyOverride
-              ? "linear-gradient(180deg,rgba(255,100,0,0.4),rgba(255,50,0,0.6))"
-              : weatherGrounded ? "linear-gradient(180deg,rgba(255,0,0,0.3),rgba(200,0,0,0.5))"
-              : "rgba(40,40,60,0.8)",
-            border: emergencyOverride ? "2px solid #ff8800" : weatherGrounded ? "2px solid #ff4444" : "1px solid #444466",
-            color: emergencyOverride ? "#ffaa00" : weatherGrounded ? "#ff6666" : "#666",
-            fontFamily: "'Orbitron', monospace", fontSize: "10px", padding: "4px 10px", borderRadius: "4px", cursor: "pointer",
-          }}
-        >
-          {emergencyOverride ? "DEACTIVATE OVERRIDE" : "FAA OVERRIDE"}
-        </button>
-      </div>
+
+      {divider}
+
+      {/* ── Scenario ── */}
+      {sectionLabel("SCENARIO")}
+      <select
+        value={selectedScenario}
+        onChange={(e) => setScenario(e.target.value)}
+        style={{
+          width: "100%",
+          background: "#050f1e",
+          border: "1px solid rgba(0,255,255,0.25)",
+          color: "#ccc",
+          padding: "5px 6px",
+          borderRadius: "4px",
+          fontSize: "10px",
+          fontFamily: "'Courier New', monospace",
+          cursor: "pointer",
+          marginBottom: "6px",
+          boxShadow: "none",
+        }}
+      >
+        <option value="normal">Normal Operations</option>
+        <option value="rush_hour">Rush Hour</option>
+        <option value="maintenance">Scheduled Maintenance</option>
+        <option value="emergency">Emergency Response</option>
+      </select>
+      <span style={{
+        color: "#446688",
+        fontSize: "9px",
+        fontStyle: "italic",
+        lineHeight: "1.4",
+        display: "block",
+      }}>
+        {config?.description}
+      </span>
+
+      {/* Spacer pushes FAA Override to the bottom */}
+      <div style={{ flex: 1 }} />
+
+      {/* ── FAA Override ── */}
+      <button
+        onClick={toggleEmergencyOverride}
+        style={{
+          background: emergencyOverride
+            ? "linear-gradient(180deg,rgba(255,100,0,0.4),rgba(255,50,0,0.6))"
+            : weatherGrounded
+            ? "linear-gradient(180deg,rgba(255,0,0,0.3),rgba(200,0,0,0.5))"
+            : "rgba(40,40,60,0.8)",
+          border: emergencyOverride ? "2px solid #ff8800" : weatherGrounded ? "2px solid #ff4444" : "1px solid #444466",
+          color: emergencyOverride ? "#ffaa00" : weatherGrounded ? "#ff6666" : "#666",
+          fontFamily: "'Orbitron', monospace",
+          fontSize: "9px",
+          padding: "7px 4px",
+          borderRadius: "4px",
+          cursor: "pointer",
+          width: "100%",
+          letterSpacing: "0.5px",
+        }}
+      >
+        {emergencyOverride ? "DEACTIVATE OVERRIDE" : "FAA OVERRIDE"}
+      </button>
     </div>
   );
 }

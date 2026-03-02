@@ -81,21 +81,21 @@ canvas {
 }
 
 .control-panel {
-  background: rgba(0, 0, 0, 0.9);
-  border: 1px solid #00ffff;
-  padding: 12px;
-  margin: 8px;
-  border-radius: 5px;
+  background: rgba(0, 4, 12, 0.97);
+  border-right: 1px solid rgba(0, 255, 255, 0.15);
+  padding: 12px 10px;
   display: flex;
-  gap: 15px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0;
   pointer-events: auto;
-  width: fit-content;
-  align-items: center;
+  width: 152px;
+  align-items: stretch;
   position: fixed;
-  bottom: 8px;
-  right: 8px;
+  top: 55px;
+  left: 0;
+  bottom: 55px;
   z-index: 1000;
+  overflow-y: auto;
 }
 
 .control-group {
@@ -371,11 +371,6 @@ select option {
 @media (max-width: 768px) {
   .header h1 {
     font-size: 16px;
-  }
-  
-  .control-panel {
-    flex-direction: column;
-    width: calc(100% - 16px);
   }
   
   .metrics-panel {

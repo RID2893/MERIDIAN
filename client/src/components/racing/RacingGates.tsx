@@ -12,7 +12,6 @@ const GATE_COLOR_MAP: Record<string, number> = {
 
 // Each gate straddles both altitude bands — positioned at mid altitude
 const MID_ALT = (ALT_CLASS_A + ALT_CLASS_B) / 2;
-const GATE_HEIGHT = ALT_CLASS_A - ALT_CLASS_B + 0.5;
 
 // ─── Single Gate ─────────────────────────────────────────────────────────
 function Gate({ gateDef, curveA }: {
@@ -41,7 +40,7 @@ function Gate({ gateDef, curveA }: {
   const colorHex = GATE_COLOR_MAP[gateDef.color] ?? 0x888888;
 
   useFrame((_, delta) => {
-    if (!torusRef.current) return;
+    if (!torusRef.current || !glowRef.current) return;
     const isActive = gate?.status === 'ACTIVE';
     const isComplete = gate?.status === 'COMPLETE';
 

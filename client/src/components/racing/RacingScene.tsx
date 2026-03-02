@@ -1,6 +1,7 @@
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
-import { OrbitControls, Grid } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
+import * as THREE from "three";
 import { useRacing } from "@/lib/stores/useRacing";
 import { RacingTrack } from "./RacingTrack";
 import { RacingGates } from "./RacingGates";
@@ -23,6 +24,10 @@ function SimLoop() {
 
 // ─── Scene ────────────────────────────────────────────────────────────────
 export function RacingScene() {
+  const gridHelper = useMemo(() =>
+    new THREE.GridHelper(40, 40, 0x0d2244, 0x0d1a35), []
+  );
+
   return (
     <>
       <SimLoop />
@@ -45,19 +50,7 @@ export function RacingScene() {
       </mesh>
 
       {/* Grid */}
-      <Grid
-        position={[0, -0.04, -2.5]}
-        cellSize={1}
-        cellThickness={0.4}
-        cellColor="#0d1a35"
-        sectionSize={5}
-        sectionThickness={0.8}
-        sectionColor="#0d2244"
-        fadeDistance={35}
-        fadeStrength={1}
-        followCamera={false}
-        infiniteGrid={false}
-      />
+      <primitive object={gridHelper} position={[0, -0.04, -2.5]} />
 
       {/* Circuit */}
       <RacingTrack />

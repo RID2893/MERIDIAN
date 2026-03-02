@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { useLocation } from "wouter";
+import { useShallow } from "zustand/react/shallow";
 import { useRacing } from "@/lib/stores/useRacing";
 
 // ─── Colour helpers ────────────────────────────────────────────────────────
@@ -161,14 +162,14 @@ function Leaderboard() {
 
 // ─── AAMI Panel ───────────────────────────────────────────────────────────
 function AAMIPanel() {
-  const { aamiTelemetry, aamiCompliance, aamiQuality, aamiSafetyEvents, aamiStatus, raceTime } = useRacing(s => ({
+  const { aamiTelemetry, aamiCompliance, aamiQuality, aamiSafetyEvents, aamiStatus, raceTime } = useRacing(useShallow(s => ({
     aamiTelemetry:    s.aamiTelemetry,
     aamiCompliance:   s.aamiCompliance,
     aamiQuality:      s.aamiQuality,
     aamiSafetyEvents: s.aamiSafetyEvents,
     aamiStatus:       s.aamiStatus,
     raceTime:         s.raceTime,
-  }));
+  })));
 
   const statusColor: Record<string, string> = {
     ACTIVE:    '#00FF88',
@@ -214,7 +215,7 @@ function AAMIPanel() {
 
 // ─── Control Bar ─────────────────────────────────────────────────────────
 function ControlBar() {
-  const { raceRunning, racePaused, startRace, pauseRace, resetRace, triggerAbort, forceGate, vehicles } = useRacing(s => ({
+  const { raceRunning, racePaused, startRace, pauseRace, resetRace, triggerAbort, forceGate, vehicles } = useRacing(useShallow(s => ({
     raceRunning:  s.raceRunning,
     racePaused:   s.racePaused,
     startRace:    s.startRace,
@@ -223,16 +224,16 @@ function ControlBar() {
     triggerAbort: s.triggerAbort,
     forceGate:    s.forceGate,
     vehicles:     s.vehicles,
-  }));
+  })));
 
-  const { followedId, showClassA, showClassB, setFollowed, setShowClassA, setShowClassB } = useRacing(s => ({
+  const { followedId, showClassA, showClassB, setFollowed, setShowClassA, setShowClassB } = useRacing(useShallow(s => ({
     followedId:    s.followedId,
     showClassA:    s.showClassA,
     showClassB:    s.showClassB,
     setFollowed:   s.setFollowed,
     setShowClassA: s.setShowClassA,
     setShowClassB: s.setShowClassB,
-  }));
+  })));
 
   const btn = (
     label: string,
@@ -325,10 +326,10 @@ function hexToRgb(hex: string): string {
 
 // ─── Abort Alert Banner ───────────────────────────────────────────────────
 function AbortBanner() {
-  const { abortAlertLevel, abortAlertText } = useRacing(s => ({
+  const { abortAlertLevel, abortAlertText } = useRacing(useShallow(s => ({
     abortAlertLevel: s.abortAlertLevel,
     abortAlertText:  s.abortAlertText,
-  }));
+  })));
 
   if (!abortAlertLevel) return null;
 
@@ -358,11 +359,11 @@ function AbortBanner() {
 // ─── Header ───────────────────────────────────────────────────────────────
 function RacingHeader() {
   const [, navigate] = useLocation();
-  const { raceRunning, raceTime, vehicles } = useRacing(s => ({
+  const { raceRunning, raceTime, vehicles } = useRacing(useShallow(s => ({
     raceRunning: s.raceRunning,
     raceTime:    s.raceTime,
     vehicles:    s.vehicles,
-  }));
+  })));
 
   const leader = [...vehicles].sort((a, b) => {
     const ld = b.laps - a.laps;

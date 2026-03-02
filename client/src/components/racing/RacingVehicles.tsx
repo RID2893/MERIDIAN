@@ -35,11 +35,9 @@ function Vehicle({ vehicleId }: { vehicleId: string }) {
     new THREE.LineBasicMaterial({ color: cfg.color, transparent: true, opacity: 0.4 }),
   ), [trailGeo, cfg.color]);
 
-  const { showClassA, showClassB, followedId } = useRacing(s => ({
-    showClassA: s.showClassA,
-    showClassB: s.showClassB,
-    followedId: s.followedId,
-  }));
+  const showClassA = useRacing(s => s.showClassA);
+  const showClassB = useRacing(s => s.showClassB);
+  const followedId = useRacing(s => s.followedId);
 
   const vehicle = useRacing(s => s.vehicles.find(v => v.id === vehicleId));
 

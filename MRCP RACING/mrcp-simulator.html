@@ -74,7 +74,8 @@
       border-right: 1px solid rgba(0,212,255,0.12);
       overflow: hidden;
     }
-    #circuit-svg { width: 100%; height: 100%; display: block; }
+    #canvas-3d { width: 100%; height: 100%; }
+    #canvas-3d canvas { display: block; width: 100% !important; height: 100% !important; }
 
     /* tooltips / overlays */
     #vehicle-tooltip {
@@ -220,6 +221,9 @@
     @keyframes abort-pulse { 0%,100%{background:rgba(255,59,92,0.3)} 50%{background:rgba(255,59,92,0.65)} }
     @keyframes fadeIn      { from{opacity:0} to{opacity:1} }
   </style>
+  <!-- S10: Three.js 3D Rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 
@@ -256,7 +260,7 @@
 
   <!-- LEFT: Circuit Map -->
   <div id="circuit-panel">
-    <svg id="circuit-svg" viewBox="0 0 800 550" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="canvas-3d"></div>
     <div id="vehicle-tooltip"></div>
     <div id="mission-overlay">
       <div id="mission-gate-label"></div>
@@ -429,101 +433,131 @@ const AAMI = { tel:0, safe:0, startMs:null };
 let telIv = null, qualIv = null, scoreIv = null;
 
 // ═══════════════════════════════════════════════════════════════════════
-// S1: SVG CIRCUIT BUILD
+// S10: THREE.JS 3D SCENE
 // ═══════════════════════════════════════════════════════════════════════
-function buildCircuit() {
-  const svg = document.getElementById('circuit-svg');
-  svg.innerHTML = '';
 
-  const ns = 'http://www.w3.org/2000/svg';
-  const el = (tag, attrs) => {
-    const e = document.createElementNS(ns, tag);
-    for (const [k,v] of Object.entries(attrs)) e.setAttribute(k, v);
-    return e;
-  };
+// Convert SVG coordinates (0–800, 0–550) to Three.js world space
+function svgTo3D(x, y, altY) {
+  return new THREE.Vector3(x - 400, altY || 0, y - 275);
+}
 
-  // Background grid
-  for (let x = 0; x <= W; x += 80)
-    svg.appendChild(el('line', {x1:x,y1:0,x2:x,y2:H, stroke:'#0c1826', 'stroke-width':'0.5'}));
-  for (let y = 0; y <= H; y += 55)
-    svg.appendChild(el('line', {x1:0,y1:y,x2:W,y2:y, stroke:'#0c1826', 'stroke-width':'0.5'}));
+let _scene, _camera, _renderer, _controls;
 
-  // Airspace bands
-  svg.appendChild(el('rect', {id:'band-a', x:0,y:0, width:W, height:H*0.60, fill:'rgba(255,107,0,0.07)'}));
-  svg.appendChild(el('rect', {id:'band-b', x:0,y:H*0.60, width:W, height:H*0.40, fill:'rgba(0,212,255,0.05)'}));
+function build3DScene() {
+  const container = document.getElementById('canvas-3d');
+  const cw = container.clientWidth  || 720;
+  const ch = container.clientHeight || 540;
 
-  // Buffer zone
-  svg.appendChild(el('line', {x1:0,y1:H*0.60,x2:W,y2:H*0.60, stroke:'rgba(255,59,92,0.55)', 'stroke-width':'1.5', 'stroke-dasharray':'8,5'}));
+  // Scene
+  _scene = new THREE.Scene();
+  _scene.background = new THREE.Color(0x020810);
+  _scene.fog = new THREE.Fog(0x020810, 800, 1400);
 
-  // Band labels
-  const txt = (content, x, y, fill, size='9') => {
-    const t = document.createElementNS(ns,'text');
-    t.setAttribute('x',x); t.setAttribute('y',y);
-    t.setAttribute('fill',fill); t.setAttribute('font-size',size);
-    t.setAttribute('font-family','Courier New'); t.setAttribute('opacity','0.6');
-    t.textContent = content; return t;
-  };
-  svg.appendChild(txt('CLASS A · 30–80m AGL', 8, 15, '#FF6B00'));
-  svg.appendChild(txt('⚠ BUFFER ZONE', 8, H*0.60 - 5, 'rgba(255,59,92,0.7)'));
-  svg.appendChild(txt('CLASS B · 0–30m AGL', 8, H*0.60 + 13, '#00D4FF'));
-  svg.appendChild(txt('MRCP CIRCUIT ALPHA · 6 GATES · MRSSP PROTOCOL ACTIVE', W/2-150, H-5, '#1c2e4a'));
+  // Camera
+  _camera = new THREE.PerspectiveCamera(50, cw / ch, 0.5, 2000);
+  _camera.position.set(0, 380, 440);
+  _camera.lookAt(0, 0, 0);
 
-  // Track path
-  let d = `M ${SEGS[0].p0[0]*W} ${SEGS[0].p0[1]*H}`;
-  SEGS.forEach(s => { d += ` C ${s.c1[0]*W} ${s.c1[1]*H},${s.c2[0]*W} ${s.c2[1]*H},${s.p3[0]*W} ${s.p3[1]*H}`; });
-  d += ' Z';
-  svg.appendChild(el('path', {d, stroke:'rgba(0,212,255,0.32)', 'stroke-width':'3', fill:'none'}));
+  // Renderer
+  _renderer = new THREE.WebGLRenderer({ antialias: true });
+  _renderer.setSize(cw, ch);
+  _renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  container.appendChild(_renderer.domElement);
 
-  // Gates
+  // Orbit controls
+  _controls = new THREE.OrbitControls(_camera, _renderer.domElement);
+  _controls.target.set(0, 0, 0);
+  _controls.minDistance = 80;
+  _controls.maxDistance = 900;
+  _controls.maxPolarAngle = Math.PI * 0.48;
+  _controls.enableDamping = true;
+  _controls.dampingFactor = 0.08;
+
+  // Lighting
+  _scene.add(new THREE.AmbientLight(0x001a3a, 3.0));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.8);
+  sun.position.set(200, 400, 200);
+  _scene.add(sun);
+  _scene.add(new THREE.PointLight(0x004488, 1.2, 800));
+
+  // Ground
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(950, 750),
+    new THREE.MeshStandardMaterial({ color: 0x020810 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  _scene.add(ground);
+  _scene.add(new THREE.GridHelper(950, 48, 0x0d2244, 0x0d1a35));
+
+  // Airspace band planes (very subtle, semi-transparent)
+  const bandMatA = new THREE.MeshStandardMaterial({ color: 0xFF6B00, transparent: true, opacity: 0.04, side: THREE.DoubleSide });
+  const bandMatB = new THREE.MeshStandardMaterial({ color: 0x00D4FF, transparent: true, opacity: 0.04, side: THREE.DoubleSide });
+  const bandA = new THREE.Mesh(new THREE.PlaneGeometry(950, 750), bandMatA);
+  const bandB = new THREE.Mesh(new THREE.PlaneGeometry(950, 750), bandMatB);
+  bandA.rotation.x = -Math.PI / 2; bandA.position.y = 40; // Class A alt
+  bandB.rotation.x = -Math.PI / 2; bandB.position.y = 15; // Class B alt
+  _scene.add(bandA); _scene.add(bandB);
+
+  // Track tubes — sample getPos(t) at 220 points for each altitude
+  function buildTrack(altY, hexColor) {
+    const pts = [];
+    for (let i = 0; i <= 220; i++) {
+      const p = getPos(i / 220);
+      pts.push(svgTo3D(p.x, p.y, altY));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts, true);
+    const geom  = new THREE.TubeGeometry(curve, 320, 1.8, 8, true);
+    const mat   = new THREE.MeshStandardMaterial({ color: hexColor, emissive: hexColor, emissiveIntensity: 0.25 });
+    _scene.add(new THREE.Mesh(geom, mat));
+    // Glow tube (slightly larger, low opacity)
+    const glowGeom = new THREE.TubeGeometry(curve, 320, 3.2, 8, true);
+    const glowMat  = new THREE.MeshStandardMaterial({ color: hexColor, transparent: true, opacity: 0.06, side: THREE.BackSide });
+    _scene.add(new THREE.Mesh(glowGeom, glowMat));
+  }
+  buildTrack(40, 0xFF6B00); // Class A — orange
+  buildTrack(15, 0x00D4FF); // Class B — cyan
+
+  // Gate rings — torus at each gate position, straddling both altitudes
   GK.forEach(gk => {
-    const g = GATES[gk];
-    const cx = g.x * W, cy = g.y * H;
-    const grp = document.createElementNS(ns,'g');
-    grp.id = `gg-${gk}`; grp.style.cursor = 'pointer';
+    const g   = GATES[gk];
+    const pos = svgTo3D(g.x * W, g.y * H, 27.5);
+    const col = parseInt(g.color.replace('#', ''), 16);
 
-    grp.appendChild(el('circle', {id:`go-${gk}`, cx, cy, r:16, stroke:g.color, 'stroke-width':'1.5', fill:'rgba(10,20,45,0.85)'}));
-    grp.appendChild(el('circle', {id:`gi-${gk}`, cx, cy, r:5,  fill:g.color}));
-
-    const lb = document.createElementNS(ns,'text');
-    lb.setAttribute('x',cx); lb.setAttribute('y',cy+28); lb.setAttribute('text-anchor','middle');
-    lb.setAttribute('fill',g.color); lb.setAttribute('font-size','8'); lb.setAttribute('font-family','Courier New');
-    lb.textContent = gk;
-    grp.appendChild(lb);
-
-    const sub = document.createElementNS(ns,'text');
-    sub.setAttribute('x',cx); sub.setAttribute('y',cy+38); sub.setAttribute('text-anchor','middle');
-    sub.setAttribute('fill','rgba(138,155,181,0.65)'); sub.setAttribute('font-size','7'); sub.setAttribute('font-family','Courier New');
-    sub.textContent = g.mrssp;
-    grp.appendChild(sub);
-
-    grp.addEventListener('mouseenter', e => showGateCard(gk, e));
-    grp.addEventListener('mouseleave', () => { document.getElementById('gate-hover-card').style.display='none'; });
-    svg.appendChild(grp);
+    const torus = new THREE.Mesh(
+      new THREE.TorusGeometry(24, 2.0, 12, 64),
+      new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.5 })
+    );
+    torus.position.copy(pos);
+    torus.rotation.x = Math.PI / 2; // stand upright on XZ plane
+    g.mesh3d = torus;
+    g.mat3d  = torus.material;
+    g.origColor = col;
+    _scene.add(torus);
   });
 
-  // Trail group (below vehicles)
-  const tg = document.createElementNS(ns,'g'); tg.id='trail-grp'; svg.appendChild(tg);
-
-  // Vehicle group
-  const vg = document.createElementNS(ns,'g'); vg.id='veh-grp'; svg.appendChild(vg);
-
+  // Vehicle cones — Group(cone + point light) per vehicle
   VEHICLES.forEach(v => {
-    const grp = document.createElementNS(ns,'g');
-    grp.id = `vg-${v.id}`; grp.style.cursor='pointer';
+    const col  = parseInt(v.color.replace('#',''), 16);
+    const cone = new THREE.Mesh(
+      new THREE.ConeGeometry(5, 14, 6),
+      new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.35 })
+    );
+    cone.rotation.x = Math.PI; // point nose forward (+Z)
+    const light = new THREE.PointLight(col, 3, 50, 2);
+    const grp   = new THREE.Group();
+    grp.add(cone, light);
+    v.mesh3d = grp;
+    v.cone3d = cone;
+    _scene.add(grp);
+  });
 
-    const glow = document.createElementNS(ns,'circle');
-    glow.id = `vglow-${v.id}`; glow.setAttribute('r','18');
-    glow.setAttribute('fill','transparent'); glow.setAttribute('stroke',v.color);
-    glow.setAttribute('stroke-width','2'); glow.setAttribute('opacity','0');
-    grp.appendChild(glow);
-
-    const c = document.createElementNS(ns,'circle');
-    c.id = `vc-${v.id}`; c.setAttribute('r', v.cls==='A'?'8':'6'); c.setAttribute('fill',v.color);
-    grp.appendChild(c);
-
-    grp.addEventListener('mouseenter', e => showVehTip(v, e));
-    grp.addEventListener('mouseleave', () => { document.getElementById('vehicle-tooltip').style.display='none'; });
-    document.getElementById('veh-grp').appendChild(grp);
+  // Resize handler
+  window.addEventListener('resize', () => {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    _camera.aspect = w / h;
+    _camera.updateProjectionMatrix();
+    _renderer.setSize(w, h);
   });
 
   initRightPanel();
@@ -843,54 +877,78 @@ function loop(ts) {
     });
     checkGates();
     updateClock();
-    renderVehicles();
-    renderTrails();
   }
+  render3D();
   requestAnimationFrame(loop);
 }
 
-function renderVehicles() {
+// S10: 3D render — replaces renderVehicles + renderTrails
+const _up = new THREE.Vector3(0, 1, 0);
+const _dir = new THREE.Vector3();
+const _nextPos = new THREE.Vector3();
+
+function render3D() {
+  if (!_scene) return;
+
   VEHICLES.forEach(v => {
-    const grp = document.getElementById(`vg-${v.id}`);
-    if (!grp) return;
-    const vis = (v.cls==='A' && RS.showA) || (v.cls==='B' && RS.showB);
-    grp.style.display = vis ? '' : 'none';
-
+    if (!v.mesh3d) return;
+    const altY = v.cls === 'A' ? 40 : 15;
     const p = getPos(v.t);
-    const yOff = v.cls === 'A' ? -20 : 20;
-    grp.setAttribute('transform', `translate(${p.x},${p.y+yOff})`);
+    v.mesh3d.position.copy(svgTo3D(p.x, p.y, altY));
 
-    const followed = RS.followId === v.id;
-    const c  = document.getElementById(`vc-${v.id}`);
-    const g  = document.getElementById(`vglow-${v.id}`);
-    if (c && !v.aborted) c.setAttribute('fill', v.color);
-    if (c) c.setAttribute('r', followed ? (v.cls==='A'?12:9) : (v.cls==='A'?8:6));
-    if (g) {
-      g.setAttribute('opacity', followed ? '0.55' : '0');
-      g.style.animation = followed ? 'gate-pulse 1.5s infinite' : '';
+    // Orient cone along direction of travel
+    const pNext = getPos((v.t + 0.004) % 1);
+    _nextPos.copy(svgTo3D(pNext.x, pNext.y, altY));
+    _dir.subVectors(_nextPos, v.mesh3d.position).normalize();
+    if (_dir.length() > 0.001) {
+      v.cone3d.quaternion.setFromUnitVectors(_up, _dir);
+    }
+
+    // Visibility
+    v.mesh3d.visible = (v.cls === 'A' ? RS.showA : RS.showB);
+
+    // Scale followed vehicle
+    const s = RS.followId === v.id ? 1.7 : 1.0;
+    v.mesh3d.scale.setScalar(s);
+
+    // Abort: turn cone red
+    const col = v.aborted ? 0xFF3B5C : parseInt(v.color.replace('#',''), 16);
+    v.cone3d.material.color.setHex(col);
+    v.cone3d.material.emissive.setHex(col);
+  });
+
+  // Follow camera — lerp orbit target toward followed vehicle
+  if (RS.followId) {
+    const fv = VEHICLES.find(vv => vv.id === RS.followId);
+    if (fv && fv.mesh3d) {
+      _controls.target.lerp(fv.mesh3d.position, 0.06);
+    }
+  }
+
+  // Gate pulse / state colors
+  GK.forEach(gk => {
+    const g = GATES[gk];
+    if (!g.mat3d) return;
+    const st = RS.gSt[gk];
+    if (st === 'A') {
+      // ACTIVE: pulse bright
+      const pulse = 0.5 + 0.4 * Math.sin(Date.now() * 0.007);
+      g.mat3d.emissiveIntensity = pulse;
+    } else if (st === 'C') {
+      // COMPLETE: solid green
+      g.mat3d.color.setHex(0x00FF88);
+      g.mat3d.emissive.setHex(0x00FF88);
+      g.mat3d.emissiveIntensity = 0.3;
+    } else {
+      // WAITING: restore original color
+      g.mat3d.color.setHex(g.origColor);
+      g.mat3d.emissive.setHex(g.origColor);
+      g.mat3d.emissiveIntensity = 0.35;
     }
   });
-}
 
-function renderTrails() {
-  const tg = document.getElementById('trail-grp');
-  tg.innerHTML = '';
-  if (!RS.followId) return;
-  const v = VEHICLES.find(vv => vv.id === RS.followId);
-  if (!v || v.trail.length < 2) return;
-  const yOff = v.cls === 'A' ? -20 : 20;
-  const ns = 'http://www.w3.org/2000/svg';
-  for (let i = 1; i < v.trail.length; i++) {
-    const age = RS.time - v.trail[i].time;
-    const alpha = Math.max(0, 0.55 - age * 0.55);
-    if (alpha <= 0) continue;
-    const line = document.createElementNS(ns, 'line');
-    line.setAttribute('x1', v.trail[i-1].x); line.setAttribute('y1', v.trail[i-1].y + yOff);
-    line.setAttribute('x2', v.trail[i].x);   line.setAttribute('y2', v.trail[i].y + yOff);
-    line.setAttribute('stroke', v.color); line.setAttribute('stroke-width','2');
-    line.setAttribute('stroke-dasharray','3,3'); line.setAttribute('opacity', alpha);
-    tg.appendChild(line);
-  }
+  _controls.update();
+  _renderer.render(_scene, _camera);
 }
 
 function updateClock() {
@@ -1048,7 +1106,7 @@ chkWidth();
 // INIT
 // ═══════════════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', () => {
-  buildCircuit();
+  build3DScene();
   requestAnimationFrame(loop);
 });
 </script>

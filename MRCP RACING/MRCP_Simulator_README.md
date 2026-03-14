@@ -5,7 +5,7 @@
 **Alpha Edge AI × Airspeeder × Jetson ONE × AAMI**
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue)](CHANGELOG.md)
-[![Status](https://img.shields.io/badge/status-in%20development-orange)]()
+[![Status](https://img.shields.io/badge/status-complete-green)]()
 [![Runtime](https://img.shields.io/badge/runtime-browser%20%E2%80%94%20no%20install-green)]()
 [![MRSSP](https://img.shields.io/badge/protocol-MRSSP%20v1.0-00D4FF)]()
 [![AAMI](https://img.shields.io/badge/certified-AAMI%20Partner-8B5CF6)]()
@@ -216,16 +216,17 @@ The simulator was built across 9 sprints. See [`docs/PRD.md`](docs/PRD.md) for f
 
 | Sprint | Deliverable | Status |
 |--------|-------------|--------|
-| S0 | Shell & design system | 🔲 TODO |
-| S1 | Circuit map & gate positions | 🔲 TODO |
-| S2 | Vehicle engine & movement | 🔲 TODO |
-| S3 | MRSSP scoring engine | 🔲 TODO |
-| S4 | Score display & leaderboard | 🔲 TODO |
-| S5 | Gate activation & mission events | 🔲 TODO |
-| S6 | Control panel & race controls | 🔲 TODO |
-| S7 | Safety abort system | 🔲 TODO |
-| S8 | AAMI institutional panel | 🔲 TODO |
-| S9 | Polish, animations & demo mode | 🔲 TODO |
+| S0 | Shell & design system | ✅ Done |
+| S1 | Circuit map & gate positions | ✅ Done |
+| S2 | Vehicle engine & movement | ✅ Done |
+| S3 | MRSSP scoring engine | ✅ Done |
+| S4 | Score display & leaderboard | ✅ Done |
+| S5 | Gate activation & mission events | ✅ Done |
+| S6 | Control panel & race controls | ✅ Done |
+| S7 | Safety abort system | ✅ Done |
+| S8 | AAMI institutional panel | ✅ Done |
+| S9 | Polish, animations & demo mode | ✅ Done |
+| S10 | 3D rendering via Three.js | ✅ Done |
 
 ---
 
@@ -282,7 +283,7 @@ See [LICENSE](LICENSE) for full terms.
 
 | Version | Date | Notes |
 |---------|------|-------|
-| `1.0.0` | March 2025 | Initial build — full 9-sprint implementation |
+| `1.0.0` | March 2026 | Initial build — full 9-sprint implementation |
 
 ---
 

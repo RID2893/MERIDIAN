@@ -45,32 +45,57 @@ const SECTION_TITLE: CSSProperties = {
 function ScoresPanel() {
   const vehicles = useRacing(s => s.vehicles);
 
+  function fmtLapDelta(t: number | null): string {
+    if (t === null) return '—';
+    const m = Math.floor(t / 60);
+    const s = (t % 60).toFixed(1).padStart(4, '0');
+    return `${m}:${s}`;
+  }
+
   return (
     <div style={CARD}>
       <div style={SECTION_TITLE}>MRSSP Live Scores</div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', fontFamily: "'Courier New', monospace" }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', fontFamily: "'Courier New', monospace" }}>
         <thead>
           <tr style={{ color: '#666' }}>
             <th style={{ textAlign: 'left', padding: '2px 4px', fontWeight: 'normal' }}>Vehicle</th>
-            <th style={{ padding: '2px 3px', fontWeight: 'normal' }}>Spd</th>
-            <th style={{ padding: '2px 3px', fontWeight: 'normal' }}>Prc</th>
-            <th style={{ padding: '2px 3px', fontWeight: 'normal' }}>Eff</th>
-            <th style={{ padding: '2px 3px', fontWeight: 'normal' }}>Dec</th>
-            <th style={{ padding: '2px 3px', fontWeight: 'normal', color: '#00D4FF' }}>∑</th>
+            <th style={{ padding: '2px 2px', fontWeight: 'normal' }}>Spd</th>
+            <th style={{ padding: '2px 2px', fontWeight: 'normal' }}>Prc</th>
+            <th style={{ padding: '2px 2px', fontWeight: 'normal' }}>Eff</th>
+            <th style={{ padding: '2px 2px', fontWeight: 'normal' }}>Dec</th>
+            <th style={{ padding: '2px 2px', fontWeight: 'normal' }}>Rec</th>
+            <th style={{ padding: '2px 2px', fontWeight: 'normal', color: '#00D4FF' }}>∑</th>
+            <th style={{ padding: '2px 2px', fontWeight: 'normal', color: '#8A9BB5' }}>Δ</th>
           </tr>
         </thead>
         <tbody>
           {vehicles.map(v => (
             <tr key={v.id} style={{ opacity: v.aborted ? 0.5 : 1 }}>
-              <td style={{ padding: '3px 4px', color: v.vehicleClass === 'A' ? '#FF6B00' : '#00D4FF', fontSize: '9px' }}>
-                {v.vehicleClass === 'A' ? '🟠' : '🔵'} {v.id}
+              <td style={{ padding: '3px 4px', color: v.vehicleClass === 'A' ? '#FF6B00' : '#00D4FF' }}>
+                <div>{v.vehicleClass === 'A' ? '🟠' : '🔵'} {v.id}
+                  {v.nextGateId && <span style={{ color: '#444', marginLeft: '4px' }}>→{v.nextGateId}</span>}
+                </div>
+                {/* Battery bar */}
+                <div style={{ marginTop: '2px', height: '2px', background: '#0a1525', borderRadius: '1px' }}>
+                  <div style={{
+                    width: `${v.battery}%`,
+                    height: '100%',
+                    background: v.battery > 50 ? '#00FF88' : v.battery > 20 ? '#FFB800' : '#FF3B5C',
+                    borderRadius: '1px',
+                    transition: 'width 0.5s',
+                  }} />
+                </div>
               </td>
-              <td style={{ padding: '3px', textAlign: 'center', color: '#ccc' }}>{v.scores.gateTime.toFixed(0)}</td>
-              <td style={{ padding: '3px', textAlign: 'center', color: '#ccc' }}>{v.scores.precision.toFixed(0)}</td>
-              <td style={{ padding: '3px', textAlign: 'center', color: '#ccc' }}>{v.scores.efficiency.toFixed(0)}</td>
-              <td style={{ padding: '3px', textAlign: 'center', color: '#ccc' }}>{v.scores.decision.toFixed(0)}</td>
-              <td style={{ padding: '3px', textAlign: 'center', fontWeight: 'bold', color: scoreColor(v.scores.composite) }}>
-                {v.aborted ? 'ABORT' : v.scores.composite.toFixed(1)}
+              <td style={{ padding: '3px 2px', textAlign: 'center', color: '#ccc' }}>{v.scores.gateTime.toFixed(0)}</td>
+              <td style={{ padding: '3px 2px', textAlign: 'center', color: '#ccc' }}>{v.scores.precision.toFixed(0)}</td>
+              <td style={{ padding: '3px 2px', textAlign: 'center', color: '#ccc' }}>{v.scores.efficiency.toFixed(0)}</td>
+              <td style={{ padding: '3px 2px', textAlign: 'center', color: '#ccc' }}>{v.scores.decision.toFixed(0)}</td>
+              <td style={{ padding: '3px 2px', textAlign: 'center', color: scoreColor(v.scores.recovery) }}>{v.scores.recovery.toFixed(0)}</td>
+              <td style={{ padding: '3px 2px', textAlign: 'center', fontWeight: 'bold', color: scoreColor(v.scores.composite) }}>
+                {v.aborted ? 'ABRT' : v.scores.composite.toFixed(1)}
+              </td>
+              <td style={{ padding: '3px 2px', textAlign: 'center', color: '#8A9BB5', fontSize: '8px' }}>
+                {fmtLapDelta(v.lastLapTime)}
               </td>
             </tr>
           ))}

@@ -46,6 +46,9 @@ export interface RacingVehicle {
   scores: MRSSPScores;
   aborted: boolean;
   abortRecovering: boolean;
+  lastLapTime: number | null;  // seconds taken for previous lap
+  lapStartTime: number;        // raceTime when current lap began
+  nextGateId: string | null;   // ID of next upcoming gate
 }
 
 export type GateStatus = 'WAITING' | 'ACTIVE' | 'COMPLETE';
@@ -136,6 +139,9 @@ function makeVehicles(): RacingVehicle[] {
     scores:       initScores(cfg.vehicleClass),
     aborted:      false,
     abortRecovering: false,
+    lastLapTime:  null,
+    lapStartTime: 0,
+    nextGateId:   GATE_DEFS[0].id,
   }));
 }
 
@@ -311,10 +317,21 @@ export const useRacing = create<RacingState>((set, get) => ({
       if (v.aborted) return v; // frozen during abort sequence
 
       const newT = v.t + BASE_SPD * v.speed * delta;
-      const laps = newT >= 1 ? v.laps + 1 : v.laps;
-      const t = newT >= 1 ? newT - 1 : newT;
+      const completedLap = newT >= 1;
+      const laps = completedLap ? v.laps + 1 : v.laps;
+      const t = completedLap ? newT - 1 : newT;
       const battery = Math.max(0, v.battery - 0.015 * delta * 60);
-      return { ...v, t, laps, battery };
+      const lastLapTime = completedLap ? s.raceTime - v.lapStartTime : v.lastLapTime;
+      const lapStartTime = completedLap ? s.raceTime : v.lapStartTime;
+
+      // Find next gate ahead by t-distance (wrapping)
+      const nextGate = [...GATE_DEFS].sort((a, b) => {
+        const da = (a.t - t + 1) % 1;
+        const db = (b.t - t + 1) % 1;
+        return da - db;
+      })[0];
+
+      return { ...v, t, laps, battery, lastLapTime, lapStartTime, nextGateId: nextGate?.id ?? null };
     });
 
     // Gate proximity check

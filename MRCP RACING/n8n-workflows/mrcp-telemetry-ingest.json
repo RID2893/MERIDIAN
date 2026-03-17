@@ -1,0 +1,115 @@
+{
+  "name": "mrcp-telemetry-ingest",
+  "nodes": [
+    {
+      "id": "webhook-receive",
+      "name": "Webhook — Vehicle Telemetry",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "path": "mrcp-telemetry",
+        "httpMethod": "POST",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "responseData": "{ \"status\": \"ok\" }"
+      },
+      "webhookId": "mrcp-telemetry-ingest-v1",
+      "_comment": "Receives 10Hz telemetry from each vehicle (6 vehicles = up to 60 requests/sec). Payload: { vehicle_id, timestamp_utc, lat, lon, alt_ft_agl, speed_kmh, battery_pct, health_status, abort_status }"
+    },
+    {
+      "id": "validate-payload",
+      "name": "Validate & Normalize Telemetry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "// Validate required fields\nconst body = $input.item.json.body;\nconst required = ['vehicle_id', 'timestamp_utc', 'lat', 'lon', 'alt_ft_agl', 'speed_kmh', 'battery_pct'];\nfor (const f of required) {\n  if (body[f] === undefined) throw new Error(`Missing field: ${f}`);\n}\n\n// Normalize altitude to both AGL and MSL\nconst ALT_OFFSET = { 'LA': 370 }; // ft MSL offset for metro\nconst metro = 'LA';\n\nreturn [{\n  json: {\n    vehicle_id: body.vehicle_id,\n    timestamp_utc: body.timestamp_utc,\n    race_id: $env.MRCP_RACE_ID,\n    position: { lat: body.lat, lon: body.lon, alt_ft_agl: body.alt_ft_agl, alt_ft_msl: body.alt_ft_agl + (ALT_OFFSET[metro] || 0) },\n    speed_kmh: body.speed_kmh,\n    battery_pct: body.battery_pct,\n    health_status: body.health_status || 'OK',\n    abort_status: body.abort_status || false,\n    ingest_ts: Date.now()\n  }\n}];"
+      }
+    },
+    {
+      "id": "altitude-band-check",
+      "name": "Altitude Band Compliance Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.vehicle_id.startsWith('AE-') || $json.vehicle_id.startsWith('JT-') }}",
+              "operation": "equals",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "_comment": "Routes Class A (AE-*, JT-*) vs Class B (AUTO-*, PAYLOAD-*) for different band checks"
+    },
+    {
+      "id": "class-a-band-check",
+      "name": "Class A Band Violation? (30–80m AGL)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 200],
+      "parameters": {
+        "conditions": {
+          "number": [
+            { "value1": "={{ $json.position.alt_ft_agl }}", "operation": "smallerEqual", "value2": 98 },
+            { "value1": "={{ $json.position.alt_ft_agl }}", "operation": "largerEqual", "value2": 262 }
+          ]
+        }
+      },
+      "_comment": "30m = ~98ft AGL, 80m = ~262ft AGL. Violation triggers safety-monitor abort."
+    },
+    {
+      "id": "push-to-redis",
+      "name": "Update Redis — Live Telemetry State",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "parameters": {
+        "operation": "set",
+        "key": "=mrcp:vehicle:{{ $json.vehicle_id }}:telemetry",
+        "value": "={{ JSON.stringify($json) }}",
+        "expire": true,
+        "ttl": 5
+      },
+      "_comment": "Stores latest telemetry in Redis (5s TTL). Score engine and safety monitor read from here."
+    },
+    {
+      "id": "trigger-gate-check",
+      "name": "Trigger Gate Proximity Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_BASE_URL }}/webhook/mrcp-gate-trigger",
+        "body": "={{ JSON.stringify($json) }}",
+        "headers": { "Content-Type": "application/json" }
+      },
+      "_comment": "Fires gate-trigger workflow on every telemetry update for proximity evaluation"
+    }
+  ],
+  "connections": {
+    "webhook-receive": { "main": [[ { "node": "validate-payload", "type": "main", "index": 0 } ]] },
+    "validate-payload": { "main": [[ { "node": "altitude-band-check", "type": "main", "index": 0 } ]] },
+    "altitude-band-check": {
+      "main": [
+        [ { "node": "class-a-band-check", "type": "main", "index": 0 } ],
+        [ { "node": "push-to-redis", "type": "main", "index": 0 } ]
+      ]
+    },
+    "class-a-band-check": { "main": [[ { "node": "push-to-redis", "type": "main", "index": 0 } ]] },
+    "push-to-redis": { "main": [[ { "node": "trigger-gate-check", "type": "main", "index": 0 } ]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "_meta": {
+    "workflow": "mrcp-telemetry-ingest",
+    "version": "1.0",
+    "description": "Ingests real-time vehicle telemetry at 10Hz per vehicle, validates altitude band compliance, stores to Redis, and triggers gate proximity checks.",
+    "trigger": "Webhook POST /mrcp-telemetry",
+    "downstream": ["mrcp-gate-trigger", "mrcp-safety-monitor (via Redis)"]
+  }
+}

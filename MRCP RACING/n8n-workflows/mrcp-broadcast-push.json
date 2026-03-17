@@ -1,0 +1,71 @@
+{
+  "name": "mrcp-broadcast-push",
+  "nodes": [
+    {
+      "id": "webhook-broadcast",
+      "name": "Webhook — Broadcast Push",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "path": "mrcp-broadcast-push",
+        "httpMethod": "POST"
+      },
+      "_comment": "Receives score updates, gate events, abort events from other workflows"
+    },
+    {
+      "id": "format-broadcast",
+      "name": "Format for Broadcast API",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "const event = $input.item.json;\n\n// Normalize event type for broadcast\nconst broadcastPacket = {\n  event_type: event.event || 'DATA_UPDATE',\n  race_id: event.race_id || event.data?.[0]?.race_id,\n  timestamp: new Date().toISOString(),\n  payload: event.data || event,\n  // Leaderboard sorted by composite score\n  leaderboard: (event.data || []).sort((a, b) => (b.scores?.composite || 0) - (a.scores?.composite || 0)).slice(0, 6).map((v, i) => ({\n    rank: i + 1,\n    vehicle_id: v.vehicle_id,\n    composite: v.scores?.composite,\n    battery_pct: v.battery_pct\n  }))\n};\n\nreturn [{ json: broadcastPacket }];"
+      }
+    },
+    {
+      "id": "push-websocket",
+      "name": "Push to Live Stream WebSocket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BROADCAST_API_URL }}/push",
+        "body": "={{ JSON.stringify($json) }}",
+        "headers": { "Authorization": "=Bearer {{ $env.BROADCAST_API_KEY }}", "Content-Type": "application/json" }
+      },
+      "_comment": "Pushes to broadcast platform (OBS overlay, streaming graphics, public leaderboard)"
+    },
+    {
+      "id": "push-public-api",
+      "name": "Update Public Leaderboard API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 400],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $env.BROADCAST_API_URL }}/leaderboard/{{ $json.race_id }}",
+        "body": "={{ JSON.stringify($json.leaderboard) }}",
+        "headers": { "Authorization": "=Bearer {{ $env.BROADCAST_API_KEY }}", "Content-Type": "application/json" }
+      },
+      "_comment": "Public API endpoint — fans, media, and teams can poll this for live standings"
+    }
+  ],
+  "connections": {
+    "webhook-broadcast": { "main": [[ { "node": "format-broadcast", "type": "main", "index": 0 } ]] },
+    "format-broadcast": {
+      "main": [
+        [ { "node": "push-websocket", "type": "main", "index": 0 } ],
+        [ { "node": "push-public-api", "type": "main", "index": 0 } ]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "_meta": {
+    "workflow": "mrcp-broadcast-push",
+    "version": "1.0",
+    "description": "Receives score updates and event notifications from score-engine and safety-monitor. Formats for broadcast and pushes to live stream WebSocket (OBS overlay) and public leaderboard API.",
+    "trigger": "Webhook (called by mrcp-score-engine every 500ms)"
+  }
+}

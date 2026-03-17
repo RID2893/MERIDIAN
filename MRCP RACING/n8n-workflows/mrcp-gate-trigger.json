@@ -1,0 +1,85 @@
+{
+  "name": "mrcp-gate-trigger",
+  "nodes": [
+    {
+      "id": "webhook-gate",
+      "name": "Webhook — Gate Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "path": "mrcp-gate-trigger",
+        "httpMethod": "POST"
+      },
+      "_comment": "Receives vehicle telemetry from ingest workflow. Checks proximity to all gates."
+    },
+    {
+      "id": "gate-proximity",
+      "name": "Check Gate Proximity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "// MRCP Gate Definitions (normalized 0–1 circuit positions)\nconst GATES = [\n  { id: 'G1', name: 'START/FINISH', t: 0.00, color: '#00FF88', missionPhase: 'Race Start — Data Capture' },\n  { id: 'G2', name: 'Sector 1 Entry', t: 0.10, color: '#00D4FF', missionPhase: 'Technical Zone — Assessment' },\n  { id: 'G3', name: 'Apex A', t: 0.30, color: '#FF6B00', missionPhase: 'Power Sector — Execution' },\n  { id: 'G4', name: 'Apex B', t: 0.70, color: '#FF6B00', missionPhase: 'Strategy — Road-Map' },\n  { id: 'G5', name: 'Ring Exit', t: 0.90, color: '#00D4FF', missionPhase: 'Final Push — Optimization' },\n];\n\nconst GATE_PROXIMITY = 0.04; // t-distance threshold\nconst vehicle = $input.item.json;\n\n// Find which gates vehicle is near\nconst nearGates = GATES.filter(g => Math.abs(vehicle.circuit_t - g.t) < GATE_PROXIMITY);\n\nif (nearGates.length === 0) return [];\n\nreturn nearGates.map(g => ({ json: {\n  vehicle_id: vehicle.vehicle_id,\n  race_id: vehicle.race_id,\n  gate_id: g.id,\n  gate_name: g.name,\n  mission_phase: g.missionPhase,\n  gate_color: g.color,\n  is_power_sector: g.id === 'G4',\n  timestamp_utc: new Date().toISOString()\n}}));"
+      }
+    },
+    {
+      "id": "if-power-sector",
+      "name": "Is Power Sector (G4)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "conditions": {
+          "boolean": [{ "value1": "={{ $json.is_power_sector }}", "operation": "true" }]
+        }
+      }
+    },
+    {
+      "id": "sponsor-callout",
+      "name": "Fire Sponsor Callout (G4)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BROADCAST_API_URL }}/events/sponsor",
+        "body": "={ \"event\": \"POWER_SECTOR\", \"gate_id\": \"G4\", \"vehicle_id\": \"{{ $json.vehicle_id }}\", \"message\": \"POWERED BY ALPHA EDGE — Gate 4 Power Sector — MRSSP Execution Phase\" }",
+        "headers": { "Authorization": "=Bearer {{ $env.BROADCAST_API_KEY }}", "Content-Type": "application/json" }
+      },
+      "_comment": "Fires branded sponsor event when any vehicle hits Gate 4 (Power Sector)"
+    },
+    {
+      "id": "gate-event-log",
+      "name": "Log Gate Event to Algorand",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ALGORAND_NODE_URL }}/v2/transactions",
+        "body": "={{ JSON.stringify({ note: Buffer.from(JSON.stringify({ type: 'GATE_ACTIVATION', data: $json })).toString('base64') }) }}",
+        "headers": { "X-Algo-API-Token": "={{ $env.ALGORAND_API_KEY }}", "Content-Type": "application/json" }
+      },
+      "_comment": "Posts gate activation as Algorand transaction note — immutable race record"
+    }
+  ],
+  "connections": {
+    "webhook-gate": { "main": [[ { "node": "gate-proximity", "type": "main", "index": 0 } ]] },
+    "gate-proximity": { "main": [[ { "node": "if-power-sector", "type": "main", "index": 0 } ]] },
+    "if-power-sector": {
+      "main": [
+        [ { "node": "sponsor-callout", "type": "main", "index": 0 } ],
+        [ { "node": "gate-event-log", "type": "main", "index": 0 } ]
+      ]
+    },
+    "sponsor-callout": { "main": [[ { "node": "gate-event-log", "type": "main", "index": 0 } ]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "_meta": {
+    "workflow": "mrcp-gate-trigger",
+    "version": "1.0",
+    "description": "Detects when vehicles enter gate proximity radius (4% of circuit). Fires sponsor callout for Gate 4 (Power Sector). Logs all gate activations to Algorand blockchain for immutable race record.",
+    "trigger": "Webhook (called by mrcp-telemetry-ingest on each telemetry frame)"
+  }
+}

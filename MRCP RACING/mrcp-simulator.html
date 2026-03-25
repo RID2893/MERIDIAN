@@ -402,31 +402,66 @@
 // ═══════════════════════════════════════════════════════════════════════
 const W = 800, H = 550;
 
+// ── Quadrant assignment ──
+// Q1 = Top-Left   (G1)   Q2 = Top-Right  (G2/G3)
+// Q3 = Right      (G4)   Q4 = Bottom     (G5/FINISH)
+// routeA = Class A (orange, wide sweep)  routeB = Class B (purple, tight line)
+// Each route: normalised [x,y] waypoints.  exitT = main-circuit t after challenge.
+
 const GATES = {
-  G1:     { x:0.15, y:0.25, name:'Recon Sector',      mrssp:'Discovery',    color:'#8A9BB5',
-            ca:'Visual recon sweep — confirm no NAS conflicts on approach',
-            cb:'Sensor array scan — auto-validate sector via MRSS telemetry',
-            challenge:{ title:'MRSS Ring Entry Auth',      desc:'Validate LA Ring sector clearance before entry — LA Pilot C1',        scoreKey:'mission_precision', passBonus:6, failPenalty:9  }},
-  G2:     { x:0.40, y:0.10, name:'Technical Zone',     mrssp:'Assessment',   color:'#00D4FF',
-            ca:'Manual precision run — maintain flight envelope within LA Ring bands',
-            cb:'AI path optimize — minimize energy draw vs. distance logged',
-            challenge:{ title:'Energy Budget Checkpoint', desc:'Stay within LA Ring efficiency bands — MRSS consumption threshold',     scoreKey:'energy_efficiency', passBonus:5, failPenalty:8  }},
-  G3:     { x:0.70, y:0.20, name:'Strategy Waypoint',  mrssp:'Road-Map',     color:'#00D4FF',
-            ca:'Pilot decision point — select optimal routing under TRACON constraints',
-            cb:'Route computation — AI selects fastest compliant path through NAS corridor',
-            challenge:{ title:'TRACON Routing Decision',  desc:'Route selection under LA TRACON constraints — response speed scored',  scoreKey:'decision_speed',    passBonus:6, failPenalty:9  }},
-  G4:     { x:0.85, y:0.55, name:'Power Sector',       mrssp:'Execution',    color:'#FF6B00',
-            ca:'Full throttle run — maintain max speed within authorized MRSS corridor',
-            cb:'Max velocity AI — execute within authorized MRSS speed window',
-            challenge:{ title:'Max Performance Window',   desc:'Full-throttle run within MRSS authorized speed corridor',             scoreKey:'gate_time',         passBonus:7, failPenalty:10 }},
-  G5:     { x:0.65, y:0.80, name:'Final Push',         mrssp:'Optimization', color:'#FF6B00',
-            ca:'Final climb sprint — confirm abort-recovery readiness before approach',
-            cb:'Endurance mode AI — validate recovery protocol before data submission',
-            challenge:{ title:'Recovery Protocol Check',  desc:'Confirm abort-recovery readiness before final approach',              scoreKey:'recovery_index',    passBonus:5, failPenalty:8  }},
-  FINISH: { x:0.20, y:0.75, name:'Data Capture',       mrssp:'Closure',      color:'#00FF88',
-            ca:'Debrief & descent — upload full telemetry to MRSS blockchain',
-            cb:'Full data upload — AAMI certification data stream confirmed',
-            challenge:{ title:'AAMI Data Submission',     desc:'Full telemetry upload to MRSS blockchain — LA Pilot C1 record filed', scoreKey:'composite',         passBonus:3, failPenalty:5  }},
+  G1: { x:0.15, y:0.25, name:'Recon Sector',     mrssp:'Discovery',    color:'#8A9BB5',
+        quadrant:'Q1',
+        ca:'Visual recon sweep — confirm no NAS conflicts on approach',
+        cb:'Sensor array scan — auto-validate sector via MRSS telemetry',
+        challenge:{ title:'MRSS Ring Entry Auth',     desc:'LA Pilot C1 — validate Ring sector clearance before entry', scoreKey:'mission_precision', passBonus:6, failPenalty:9 },
+        routeA:[[0.15,0.25],[0.18,0.33],[0.12,0.39],[0.08,0.44],[0.15,0.46],[0.24,0.43],[0.30,0.37],[0.27,0.28],[0.34,0.22],[0.40,0.12]],
+        routeB:[[0.15,0.25],[0.17,0.31],[0.11,0.37],[0.09,0.42],[0.16,0.44],[0.23,0.41],[0.29,0.35],[0.26,0.27],[0.33,0.20],[0.40,0.12]],
+        exitT:0.155 },
+
+  G2: { x:0.40, y:0.10, name:'Technical Zone',    mrssp:'Assessment',   color:'#00D4FF',
+        quadrant:'Q2',
+        ca:'Manual precision run — maintain flight envelope within LA Ring bands',
+        cb:'AI path optimize — minimize energy draw vs. distance logged',
+        challenge:{ title:'Energy Budget Checkpoint',desc:'Stay within LA Ring efficiency bands — MRSS consumption threshold', scoreKey:'energy_efficiency', passBonus:5, failPenalty:8 },
+        routeA:[[0.40,0.10],[0.46,0.18],[0.55,0.22],[0.62,0.30],[0.56,0.37],[0.64,0.40],[0.72,0.33],[0.74,0.24],[0.72,0.18]],
+        routeB:[[0.40,0.10],[0.47,0.16],[0.55,0.20],[0.61,0.28],[0.55,0.35],[0.63,0.38],[0.71,0.31],[0.73,0.22],[0.72,0.18]],
+        exitT:0.32 },
+
+  G3: { x:0.70, y:0.20, name:'Strategy Waypoint', mrssp:'Road-Map',     color:'#00D4FF',
+        quadrant:'Q2',
+        ca:'Pilot decision point — select optimal routing under TRACON constraints',
+        cb:'Route computation — AI selects fastest compliant path through NAS corridor',
+        challenge:{ title:'TRACON Routing Decision', desc:'Route selection under LA TRACON constraints — response speed scored', scoreKey:'decision_speed', passBonus:6, failPenalty:9 },
+        routeA:[[0.70,0.20],[0.77,0.26],[0.83,0.33],[0.80,0.41],[0.87,0.45],[0.91,0.38],[0.94,0.47],[0.88,0.54],[0.85,0.55]],
+        routeB:[[0.70,0.20],[0.76,0.27],[0.82,0.34],[0.79,0.42],[0.86,0.45],[0.90,0.39],[0.93,0.47],[0.87,0.54],[0.85,0.55]],
+        exitT:0.49 },
+
+  G4: { x:0.85, y:0.55, name:'Power Sector',      mrssp:'Execution',    color:'#FF6B00',
+        quadrant:'Q3',
+        ca:'Full throttle run — maintain max speed within authorized MRSS corridor',
+        cb:'Max velocity AI — execute within authorized MRSS speed window',
+        challenge:{ title:'Max Performance Window',  desc:'Full-throttle run within MRSS authorized speed corridor', scoreKey:'gate_time', passBonus:7, failPenalty:10 },
+        routeA:[[0.85,0.55],[0.82,0.63],[0.88,0.70],[0.82,0.76],[0.74,0.80],[0.68,0.74],[0.65,0.78],[0.65,0.80]],
+        routeB:[[0.85,0.55],[0.83,0.64],[0.87,0.71],[0.81,0.77],[0.73,0.80],[0.67,0.75],[0.65,0.79],[0.65,0.80]],
+        exitT:0.655 },
+
+  G5: { x:0.65, y:0.80, name:'Final Push',        mrssp:'Optimization', color:'#FF6B00',
+        quadrant:'Q4',
+        ca:'Final climb sprint — confirm abort-recovery readiness before approach',
+        cb:'Endurance mode AI — validate recovery protocol before data submission',
+        challenge:{ title:'Recovery Protocol Check', desc:'Confirm abort-recovery readiness before final approach', scoreKey:'recovery_index', passBonus:5, failPenalty:8 },
+        routeA:[[0.65,0.80],[0.56,0.86],[0.47,0.88],[0.38,0.85],[0.32,0.80],[0.26,0.84],[0.22,0.78],[0.20,0.75]],
+        routeB:[[0.65,0.80],[0.57,0.87],[0.47,0.89],[0.37,0.86],[0.31,0.81],[0.25,0.85],[0.21,0.79],[0.20,0.75]],
+        exitT:0.82 },
+
+  FINISH:{ x:0.20, y:0.75, name:'Data Capture',    mrssp:'Closure',      color:'#00FF88',
+        quadrant:'Q4',
+        ca:'Debrief & descent — upload full telemetry to MRSS blockchain',
+        cb:'Full data upload — AAMI certification data stream confirmed',
+        challenge:{ title:'AAMI Data Submission',    desc:'Full telemetry upload to MRSS blockchain — LA Pilot C1 record filed', scoreKey:'composite', passBonus:3, failPenalty:5 },
+        routeA:[[0.20,0.75],[0.14,0.70],[0.09,0.62],[0.11,0.52],[0.07,0.44],[0.11,0.36],[0.09,0.28],[0.13,0.24],[0.15,0.25]],
+        routeB:[[0.20,0.75],[0.15,0.68],[0.10,0.61],[0.12,0.50],[0.08,0.43],[0.12,0.34],[0.10,0.27],[0.14,0.24],[0.15,0.25]],
+        exitT:0.985 },
 };
 const GK = ['G1','G2','G3','G4','G5','FINISH'];
 
@@ -462,6 +497,18 @@ function curGateIdx(t) {
   return Math.floor(((t % 1 + 1) % 1) * 6);
 }
 
+// Linear interpolation along a challenge sub-route (normalised waypoints → SVG px)
+function getChallengePos(gk, cls, ct) {
+  const route = cls === 'A' ? GATES[gk].routeA : GATES[gk].routeB;
+  const n = route.length - 1;
+  const raw = Math.max(0, Math.min(ct, 1));
+  const idx = Math.min(Math.floor(raw * n), n - 1);
+  const lt  = raw * n - idx;
+  const p0 = route[idx], p1 = route[idx + 1];
+  return { x: (p0[0] + (p1[0] - p0[0]) * lt) * W,
+           y: (p0[1] + (p1[1] - p0[1]) * lt) * H };
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // S2: VEHICLE DATA
 // ═══════════════════════════════════════════════════════════════════════
@@ -469,13 +516,19 @@ function mkScores() {
   return { gate_time:75, mission_precision:75, energy_efficiency:75, decision_speed:75, recovery_index:75, composite:75 };
 }
 
+function mkVehicle(id,name,cls,color,spd,t) {
+  return { id, name, cls, color, spd, t, bat:100, lap:1, trail:[], scores:mkScores(),
+           aborted:false, rec:75,
+           mode:'MAIN', challengeGk:null, challengeT:0,
+           gatesVisited:new Set() };
+}
 const VEHICLES = [
-  { id:'AE-MK4-001', name:'Airspeeder Alpha', cls:'A', color:'#FF6B00', spd:1.00, t:0.00, bat:100, lap:1, trail:[], scores:mkScores(), aborted:false, rec:75 },
-  { id:'AE-MK4-002', name:'Airspeeder Beta',  cls:'A', color:'#CC5500', spd:0.95, t:0.15, bat:100, lap:1, trail:[], scores:mkScores(), aborted:false, rec:75 },
-  { id:'JT-ONE-003', name:'Jetson Crew One',  cls:'A', color:'#FFB800', spd:0.80, t:0.30, bat:100, lap:1, trail:[], scores:mkScores(), aborted:false, rec:75 },
-  { id:'AUTO-001',   name:'Autonomous Alpha', cls:'B', color:'#00D4FF', spd:1.10, t:0.05, bat:100, lap:1, trail:[], scores:mkScores(), aborted:false, rec:75 },
-  { id:'AUTO-002',   name:'Autonomous Beta',  cls:'B', color:'#0099CC', spd:1.05, t:0.20, bat:100, lap:1, trail:[], scores:mkScores(), aborted:false, rec:75 },
-  { id:'PAYLOAD-003',name:'Payload Craft',    cls:'B', color:'#8B5CF6', spd:0.75, t:0.40, bat:100, lap:1, trail:[], scores:mkScores(), aborted:false, rec:75 },
+  mkVehicle('AE-MK4-001','Airspeeder Alpha','A','#FF6B00',1.00,0.00),
+  mkVehicle('AE-MK4-002','Airspeeder Beta', 'A','#CC5500',0.95,0.15),
+  mkVehicle('JT-ONE-003','Jetson Crew One', 'A','#FFB800',0.80,0.30),
+  mkVehicle('AUTO-001',  'Autonomous Alpha','B','#00D4FF',1.10,0.05),
+  mkVehicle('AUTO-002',  'Autonomous Beta', 'B','#0099CC',1.05,0.20),
+  mkVehicle('PAYLOAD-003','Payload Craft',  'B','#8B5CF6',0.75,0.40),
 ];
 
 const RS = {           // RACE_STATE
@@ -635,7 +688,39 @@ function build3DScene() {
     _scene.add(label);
   });
 
-  // Vehicle cones — Group(cone + point light) per vehicle
+  // ── Challenge sub-routes ──────────────────────────────────────────────
+  // Class A routes: orange (dim), Class B routes: purple (dim)
+  // Activated vehicles will travel along these paths.
+  function buildChallengeRoute(waypoints, hexColor, altY, opacity) {
+    const pts3d = waypoints.map(([nx, ny]) => svgTo3D(nx*W, ny*H, altY));
+    const curve = new THREE.CatmullRomCurve3(pts3d, false);
+    const geom  = new THREE.TubeGeometry(curve, waypoints.length * 8, 1.0, 6, false);
+    const mat   = new THREE.MeshStandardMaterial({
+      color: hexColor, emissive: hexColor, emissiveIntensity: 0.8,
+      transparent: true, opacity, depthWrite: false
+    });
+    const mesh = new THREE.Mesh(geom, mat);
+    _scene.add(mesh);
+    return mesh;
+  }
+
+  GK.forEach(gk => {
+    const g = GATES[gk];
+    g.tubeA3d = buildChallengeRoute(g.routeA, 0xFF6B00, 40, 0.35); // Class A orange
+    g.tubeB3d = buildChallengeRoute(g.routeB, 0x8B5CF6, 15, 0.35); // Class B purple
+  });
+
+  // ── Quadrant dividers (faint cross over the oval) ────────────────────
+  // Vertical divider at SVG x=0.50 (3D x=0), Horizontal at SVG y=0.45 (3D z=-30)
+  const divMat = new THREE.MeshStandardMaterial({ color: 0x0d2244, transparent: true, opacity: 0.5 });
+  const vDiv = new THREE.Mesh(new THREE.BoxGeometry(1.5, 80, 600), divMat);
+  vDiv.position.set(0, 27, 0);
+  _scene.add(vDiv);
+  const hDiv = new THREE.Mesh(new THREE.BoxGeometry(850, 80, 1.5), divMat);
+  hDiv.position.set(0, 27, -30); // SVG y=0.45*550=247.5 → 3D z = 247.5-275 = -27.5
+  _scene.add(hDiv);
+
+  // ── Vehicle cones — Group(cone + point light) per vehicle
   VEHICLES.forEach(v => {
     const col  = parseInt(v.color.replace('#',''), 16);
     const cone = new THREE.Mesh(
@@ -794,13 +879,21 @@ function renderLeaderboard() {
 // ═══════════════════════════════════════════════════════════════════════
 function checkGates() {
   VEHICLES.forEach(v => {
-    if (v.aborted) return;
+    if (v.aborted || v.mode === 'CHALLENGE') return;
     const pos = getPos(v.t);
     GK.forEach(gk => {
-      if (RS.gSt[gk] !== 'W') return;
+      // Per-vehicle: skip if already done this gate this lap
+      const key = gk + '_' + v.lap;
+      if (v.gatesVisited.has(key)) return;
       const g = GATES[gk];
       const dx = pos.x - g.x*W, dy = pos.y - g.y*H;
-      if (Math.sqrt(dx*dx+dy*dy) < 0.05*W) activateGate(gk, v);
+      if (Math.sqrt(dx*dx+dy*dy) < 0.05*W) {
+        v.gatesVisited.add(key);
+        v.mode = 'CHALLENGE';
+        v.challengeGk = gk;
+        v.challengeT = 0;
+        activateGate(gk, v);
+      }
     });
   });
 }
@@ -814,7 +907,7 @@ function activateGate(gk, v) {
   if (gk === 'G4') showSponsor();
   const nxt = GK[(GK.indexOf(gk)+1)%6];
   document.getElementById('aa-audit').textContent = nxt;
-  setTimeout(() => completeGate(gk, v), 2000);
+  // completeGate is now triggered by challenge route completion in the animation loop
 }
 
 function completeGate(gk, v) {
@@ -827,7 +920,12 @@ function completeGate(gk, v) {
 }
 
 function onFinish(v) {
-  VEHICLES.forEach(vv => { if (vv.lap <= v.lap) vv.lap++; });
+  VEHICLES.forEach(vv => {
+    if (vv.lap <= v.lap) {
+      vv.lap++;
+      vv.gatesVisited = new Set(); // reset so gates re-trigger each new lap
+    }
+  });
   setTimeout(() => {
     GK.forEach(gk => {
       RS.gSt[gk] = 'W';
@@ -935,8 +1033,7 @@ function showMissionOverlay(gk, v) {
   }
   const mo = document.getElementById('mission-overlay');
   mo.classList.add('active');
-  // Evaluate challenge for the triggering vehicle after brief display delay
-  if (v) setTimeout(() => evalChallenge(gk, v), 600);
+  // Score eval fires at challenge route completion (animation loop)
   setTimeout(() => mo.classList.remove('active'), 3500);
 }
 
@@ -1043,10 +1140,34 @@ function loop(ts) {
     RS.time += dt / 1000;
     VEHICLES.forEach(v => {
       if (v.aborted) return;
-      v.t = ((v.t + v.spd * BASE_SPD * dt) % 1 + 1) % 1;
+      if (v.mode === 'CHALLENGE') {
+        const cgk = v.challengeGk;
+        v.challengeT += v.spd * BASE_SPD * dt * 6;
+        if (v.challengeT >= 1) {
+          // Complete challenge: eval score, rejoin main circuit
+          v.challengeT = 1;
+          const p = getChallengePos(cgk, v.cls, 1);
+          v.trail.push({x:p.x, y:p.y, t:RS.time});
+          evalChallenge(cgk, v);
+          v.mode = 'MAIN';
+          v.t = GATES[cgk].exitT;
+          v.challengeGk = null;
+          v.challengeT = 0;
+          RS.gSt[cgk] = 'C';
+          const pill = document.getElementById(`gp-${cgk}`);
+          if (pill) pill.className = `gate-pill ${cgk==='FINISH'?'gate-finish':'gate-complete'}`;
+          setGateSVG(cgk, 'C');
+          if (cgk === 'FINISH') onFinish(v);
+        } else {
+          const p = getChallengePos(cgk, v.cls, v.challengeT);
+          v.trail.push({x:p.x, y:p.y, t:RS.time});
+        }
+      } else {
+        v.t = ((v.t + v.spd * BASE_SPD * dt) % 1 + 1) % 1;
+        const p = getPos(v.t);
+        v.trail.push({x:p.x, y:p.y, t:RS.time});
+      }
       v.bat = Math.max(0, v.bat - 0.001);
-      const p = getPos(v.t);
-      v.trail.push({x:p.x, y:p.y, t:RS.time});
       if (v.trail.length > 28) v.trail.shift();
     });
     checkGates();
@@ -1067,11 +1188,15 @@ function render3D() {
   VEHICLES.forEach(v => {
     if (!v.mesh3d) return;
     const altY = v.cls === 'A' ? 40 : 15;
-    const p = getPos(v.t);
+    const p = v.mode === 'CHALLENGE' && v.challengeGk
+      ? getChallengePos(v.challengeGk, v.cls, Math.min(v.challengeT, 1))
+      : getPos(v.t);
     v.mesh3d.position.copy(svgTo3D(p.x, p.y, altY));
 
     // Orient cone along direction of travel
-    const pNext = getPos((v.t + 0.004) % 1);
+    const pNext = v.mode === 'CHALLENGE' && v.challengeGk
+      ? getChallengePos(v.challengeGk, v.cls, Math.min(v.challengeT + 0.04, 1))
+      : getPos((v.t + 0.004) % 1);
     _nextPos.copy(svgTo3D(pNext.x, pNext.y, altY));
     _dir.subVectors(_nextPos, v.mesh3d.position).normalize();
     if (_dir.length() > 0.001) {
@@ -1098,6 +1223,18 @@ function render3D() {
       _controls.target.lerp(fv.mesh3d.position, 0.06);
     }
   }
+
+  // Challenge route highlighting — bright when any vehicle is on that route
+  GK.forEach(gk => {
+    const g = GATES[gk];
+    if (!g.tubeA3d || !g.tubeB3d) return;
+    const anyA = VEHICLES.some(v => v.mode==='CHALLENGE' && v.challengeGk===gk && v.cls==='A');
+    const anyB = VEHICLES.some(v => v.mode==='CHALLENGE' && v.challengeGk===gk && v.cls==='B');
+    g.tubeA3d.material.opacity          = anyA ? 0.90 : 0.28;
+    g.tubeA3d.material.emissiveIntensity = anyA ? 2.0  : 0.8;
+    g.tubeB3d.material.opacity          = anyB ? 0.90 : 0.28;
+    g.tubeB3d.material.emissiveIntensity = anyB ? 2.0  : 0.8;
+  });
 
   // Gate pulse / state colors
   GK.forEach(gk => {
@@ -1174,6 +1311,7 @@ function handleReset() {
   VEHICLES.forEach((v, i) => {
     v.t=startTs[i]; v.bat=100; v.lap=1; v.trail=[]; v.aborted=false; v.rec=75;
     v.scores = mkScores();
+    v.mode='MAIN'; v.challengeGk=null; v.challengeT=0; v.gatesVisited=new Set();
     const c = document.getElementById(`vc-${v.id}`); if (c) { c.setAttribute('fill',v.color); c.setAttribute('r',v.cls==='A'?'8':'6'); }
     const g = document.getElementById(`vglow-${v.id}`); if (g) g.setAttribute('opacity','0');
   });

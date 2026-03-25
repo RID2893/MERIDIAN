@@ -1,7 +1,7 @@
 import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { useRacing, VEHICLE_CONFIGS } from "@/lib/stores/useRacing";
+import { useRacing, VEHICLE_CONFIGS, getChallengePoint } from "@/lib/stores/useRacing";
 import { makeCurve, ALT_CLASS_A, ALT_CLASS_B } from "./RacingTrack";
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -53,13 +53,24 @@ function Vehicle({ vehicleId }: { vehicleId: string }) {
 
     if (!visible) return;
 
-    const t = vehicle.t;
-    const pos = curve.getPoint(t);
+    let pos: THREE.Vector3;
+    let tan: THREE.Vector3;
 
-    // Lateral offset — perpendicular to travel direction in XZ
-    const tan   = curve.getTangent(t).normalize();
-    const right = new THREE.Vector3().crossVectors(UP, tan).normalize();
-    pos.add(right.multiplyScalar(LATERAL_OFFSET[cfg.vehicleClass]));
+    if (vehicle.mode === 'CHALLENGE' && vehicle.challengeGk) {
+      // Position along challenge sub-route
+      pos = getChallengePoint(vehicle.challengeGk, cfg.vehicleClass, vehicle.challengeT);
+      // Approximate tangent from small forward step
+      const posNext = getChallengePoint(vehicle.challengeGk, cfg.vehicleClass, Math.min(vehicle.challengeT + 0.02, 1));
+      tan = posNext.clone().sub(pos).normalize();
+      if (tan.lengthSq() < 0.001) tan = new THREE.Vector3(0, 0, -1);
+    } else {
+      const t = vehicle.t;
+      pos = curve.getPoint(t);
+      tan = curve.getTangent(t).normalize();
+      // Lateral offset — perpendicular to travel direction in XZ
+      const right = new THREE.Vector3().crossVectors(UP, tan).normalize();
+      pos.add(right.multiplyScalar(LATERAL_OFFSET[cfg.vehicleClass]));
+    }
 
     // Orient cone to face direction of travel
     const quaternion = new THREE.Quaternion();

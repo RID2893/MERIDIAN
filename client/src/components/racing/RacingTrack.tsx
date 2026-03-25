@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import * as THREE from "three";
+import { CHALLENGE_ROUTES, useRacing } from "@/lib/stores/useRacing";
 
 // ─── Lollipop circuit waypoints ───────────────────────────────────────────
 // Ring: radius 5, center at [0, 0, -5] in XZ plane
@@ -77,12 +78,75 @@ export function RacingTrack() {
         <meshStandardMaterial color="#00D4FF" transparent opacity={0.12} emissive="#00D4FF" emissiveIntensity={0.3} side={THREE.BackSide} />
       </mesh>
 
+      {/* Challenge sub-routes */}
+      <ChallengeRoutes />
+
       {/* Start/Finish line — horizontal bar at z=9 */}
       <StartFinishLine />
 
       {/* Airspace band separators */}
       <AirspaceBands />
     </group>
+  );
+}
+
+// ─── Challenge Routes ─────────────────────────────────────────────────────
+// Renders dim sub-route tubes for each gate challenge; glows bright when active
+function ChallengeRoutes() {
+  const vehicles   = useRacing(s => s.vehicles);
+
+  // Which gate challenges are currently active (any vehicle in CHALLENGE mode)
+  const activeGks  = new Set(vehicles.filter(v => v.mode === 'CHALLENGE' && v.challengeGk).map(v => v.challengeGk!));
+
+  return (
+    <group>
+      {Object.entries(CHALLENGE_ROUTES).map(([gk, cr]) => {
+        const isActive = activeGks.has(gk);
+        return (
+          <group key={gk}>
+            <ChallengeRouteLine
+              pts={cr.routeA}
+              altY={ALT_CLASS_A}
+              color="#FF6B00"
+              active={isActive}
+            />
+            <ChallengeRouteLine
+              pts={cr.routeB}
+              altY={ALT_CLASS_B}
+              color="#8B5CF6"
+              active={isActive}
+            />
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+function ChallengeRouteLine({
+  pts, altY, color, active,
+}: {
+  pts: [number, number][];
+  altY: number;
+  color: string;
+  active: boolean;
+}) {
+  const geo = useMemo(() => {
+    const points = pts.map(([x, z]) => new THREE.Vector3(x, altY, z));
+    const curve  = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.5);
+    return new THREE.TubeGeometry(curve, pts.length * 6, 0.04, 6, false);
+  }, [pts, altY]);
+
+  return (
+    <mesh geometry={geo}>
+      <meshStandardMaterial
+        color={color}
+        emissive={color}
+        emissiveIntensity={active ? 1.6 : 0.25}
+        transparent
+        opacity={active ? 0.9 : 0.35}
+      />
+    </mesh>
   );
 }
 

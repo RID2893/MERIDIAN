@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import * as THREE from 'three';
 
 // ─── MRSSP Vehicle Config ──────────────────────────────────────────────────
 export const VEHICLE_CONFIGS = [
@@ -13,6 +14,10 @@ export const VEHICLE_CONFIGS = [
 // BASE_SPD: how many laps/sec a speed=1.0 vehicle completes
 const BASE_SPD = 0.055;
 
+// Altitude constants (scene units, must match RacingTrack.tsx)
+const ALT_CLASS_A = 1.5;
+const ALT_CLASS_B = 0.8;
+
 // ─── Gate Definitions ─────────────────────────────────────────────────────
 // t-values calibrated to the 21-point lollipop curve (20 segments, step=0.05)
 // pt0=START(t=0) pt2=ring-entry(t=0.10) pt6=apex-A(t=0.30) pt14=apex-B(t=0.70) pt18=ring-exit(t=0.90)
@@ -23,6 +28,91 @@ export const GATE_DEFS = [
   { id: 'G4', name: 'Apex B',         t: 0.70, color: '#FF6B00', missionPhase: 'Strategy — Road-Map' },
   { id: 'G5', name: 'Ring Exit',      t: 0.90, color: '#00D4FF', missionPhase: 'Final Push — Optimization' },
 ] as const;
+
+// ─── Challenge Routes ──────────────────────────────────────────────────────
+// [x, z] waypoints in world space (ring center=[0,-5], ring R=5, straight z=0→9)
+// routeA = Class A (wider sweep), routeB = Class B (tighter path)
+// exitT: circuit t-value where vehicle re-enters main oval after challenge
+
+type ScoreKey = keyof MRSSPScores;
+
+interface ChallengeRoute {
+  title:       string;
+  desc:        string;
+  scoreKey:    ScoreKey;
+  passBonus:   number;
+  failPenalty: number;
+  exitT:       number;
+  routeA:      [number, number][];
+  routeB:      [number, number][];
+}
+
+export const CHALLENGE_ROUTES: Record<string, ChallengeRoute> = {
+  // G2 — ring entry [0,0]: detour into lower ring interior
+  G2: {
+    title:       'Energy Budget Checkpoint',
+    desc:        'Navigate the efficiency corridor inside the ring entry',
+    scoreKey:    'efficiency',
+    passBonus:   5,
+    failPenalty: 8,
+    exitT:       0.15,
+    routeA: [[0,0], [2,-1], [4,-2.5], [4,-5], [2.5,-4], [1,-2.5], [0,-1.5]],
+    routeB: [[0,0], [-2,-1.2], [-3.5,-2.5], [-3,-5], [-1.5,-4], [0,-2.5]],
+  },
+  // G3 — right apex [5,-5]: loop inside upper-right ring quadrant
+  G3: {
+    title:       'Max Performance Window',
+    desc:        'Full-throttle run through the right-side power sector',
+    scoreKey:    'gateTime',
+    passBonus:   7,
+    failPenalty: 10,
+    exitT:       0.32,
+    routeA: [[5,-5], [4.5,-2.5], [3,-1], [1,-2], [0.5,-5], [1.5,-8], [4,-9], [5,-7], [5,-5]],
+    routeB: [[5,-5], [3.5,-3], [2,-2], [1,-4.5], [2,-7.5], [4,-8.5], [5,-5]],
+  },
+  // G4 — left apex [-5,-5]: loop inside upper-left ring quadrant (mirror of G3)
+  G4: {
+    title:       'TRACON Routing Decision',
+    desc:        'Precision routing through LA TRACON constraints',
+    scoreKey:    'decision',
+    passBonus:   6,
+    failPenalty: 9,
+    exitT:       0.72,
+    routeA: [[-5,-5], [-4.5,-2.5], [-3,-1], [-1,-2], [-0.5,-5], [-1.5,-8], [-4,-9], [-5,-7], [-5,-5]],
+    routeB: [[-5,-5], [-3.5,-3], [-2,-2], [-1,-4.5], [-2,-7.5], [-4,-8.5], [-5,-5]],
+  },
+  // G5 — ring exit [0,0]: weave up the return straight
+  G5: {
+    title:       'Recovery Protocol Check',
+    desc:        'Verify abort-recovery readiness on the return approach',
+    scoreKey:    'recovery',
+    passBonus:   5,
+    failPenalty: 8,
+    exitT:       0.97,
+    routeA: [[0,0], [2,1.5], [3,4], [2,7], [0,9]],
+    routeB: [[0,0], [-2,1.5], [-3,4], [-2,7], [0,9]],
+  },
+};
+
+// Interpolate a world-space position along a challenge route (t: 0→1)
+export function getChallengePoint(gk: string, vehicleClass: 'A' | 'B', t: number): THREE.Vector3 {
+  const cr = CHALLENGE_ROUTES[gk];
+  const altY = vehicleClass === 'A' ? ALT_CLASS_A : ALT_CLASS_B;
+  if (!cr) return new THREE.Vector3(0, altY, 0);
+  const pts = vehicleClass === 'A' ? cr.routeA : cr.routeB;
+  const n   = pts.length - 1;
+  const ct  = Math.max(0, Math.min(t, 1));
+  const fi  = ct * n;
+  const idx = Math.min(Math.floor(fi), n - 1);
+  const lt  = fi - idx;
+  const p0  = pts[idx];
+  const p1  = pts[Math.min(idx + 1, n)];
+  return new THREE.Vector3(
+    p0[0] + (p1[0] - p0[0]) * lt,
+    altY,
+    p0[1] + (p1[1] - p0[1]) * lt,
+  );
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────
 export interface MRSSPScores {
@@ -40,15 +130,20 @@ export interface RacingVehicle {
   vehicleClass: 'A' | 'B';
   color: string;
   speed: number;
-  t: number;         // 0–1 progress on circuit
+  t: number;                    // 0–1 progress on main circuit
   laps: number;
-  battery: number;   // 0–100 %
+  battery: number;              // 0–100 %
   scores: MRSSPScores;
   aborted: boolean;
   abortRecovering: boolean;
-  lastLapTime: number | null;  // seconds taken for previous lap
-  lapStartTime: number;        // raceTime when current lap began
-  nextGateId: string | null;   // ID of next upcoming gate
+  lastLapTime: number | null;   // seconds taken for previous lap
+  lapStartTime: number;         // raceTime when current lap began
+  nextGateId: string | null;    // ID of next upcoming gate
+  // Challenge routing
+  mode: 'MAIN' | 'CHALLENGE';
+  challengeGk: string | null;   // active challenge gate ID
+  challengeT: number;           // 0–1 progress within challenge route
+  gatesVisited: string[];       // gates triggered this lap (reset on lap complete)
 }
 
 export type GateStatus = 'WAITING' | 'ACTIVE' | 'COMPLETE';
@@ -125,41 +220,59 @@ function updateScores(v: RacingVehicle): MRSSPScores {
   return { gateTime, precision, efficiency, decision, recovery, composite };
 }
 
+function evalChallenge(v: RacingVehicle, gk: string): MRSSPScores {
+  const cr = CHALLENGE_ROUTES[gk];
+  if (!cr) return v.scores;
+  const key     = cr.scoreKey;
+  const current = v.scores[key];
+  // Class B gets a threshold advantage on decision + recovery
+  const threshold = (v.vehicleClass === 'B' && (key === 'decision' || key === 'recovery')) ? 67 : 72;
+  const passed  = current > threshold;
+  const delta   = passed ? cr.passBonus : -cr.failPenalty;
+  const updated = { ...v.scores, [key]: Math.min(100, Math.max(0, current + delta)) };
+  const composite = updated.gateTime * 0.25 + updated.precision * 0.25 + updated.efficiency * 0.20 + updated.decision * 0.15 + updated.recovery * 0.15;
+  return { ...updated, composite };
+}
+
 // ─── Initial state builders ───────────────────────────────────────────────
 function makeVehicles(): RacingVehicle[] {
   return VEHICLE_CONFIGS.map(cfg => ({
-    id:           cfg.id,
-    name:         cfg.name,
-    vehicleClass: cfg.vehicleClass,
-    color:        cfg.color,
-    speed:        cfg.speed,
-    t:            cfg.t0,
-    laps:         0,
-    battery:      100,
-    scores:       initScores(cfg.vehicleClass),
-    aborted:      false,
+    id:              cfg.id,
+    name:            cfg.name,
+    vehicleClass:    cfg.vehicleClass,
+    color:           cfg.color,
+    speed:           cfg.speed,
+    t:               cfg.t0,
+    laps:            0,
+    battery:         100,
+    scores:          initScores(cfg.vehicleClass),
+    aborted:         false,
     abortRecovering: false,
-    lastLapTime:  null,
-    lapStartTime: 0,
-    nextGateId:   GATE_DEFS[0].id,
+    lastLapTime:     null,
+    lapStartTime:    0,
+    nextGateId:      GATE_DEFS[0].id,
+    mode:            'MAIN' as const,
+    challengeGk:     null,
+    challengeT:      0,
+    gatesVisited:    [],
   }));
 }
 
 function makeGates(): RacingGate[] {
   return GATE_DEFS.map(g => ({
-    id:            g.id,
-    name:          g.name,
-    t:             g.t,
-    color:         g.color,
-    missionPhase:  g.missionPhase,
-    status:        'WAITING' as GateStatus,
+    id:              g.id,
+    name:            g.name,
+    t:               g.t,
+    color:           g.color,
+    missionPhase:    g.missionPhase,
+    status:          'WAITING' as GateStatus,
     activeVehicleId: null,
   }));
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────
-let scoreInterval: ReturnType<typeof setInterval> | null = null;
-let aamiInterval:  ReturnType<typeof setInterval> | null = null;
+let scoreInterval:    ReturnType<typeof setInterval> | null = null;
+let aamiInterval:     ReturnType<typeof setInterval> | null = null;
 let aamiFlipInterval: ReturnType<typeof setInterval> | null = null;
 
 function clearIntervals() {
@@ -169,21 +282,21 @@ function clearIntervals() {
 }
 
 export const useRacing = create<RacingState>((set, get) => ({
-  raceRunning:    false,
-  racePaused:     false,
-  raceTime:       0,
-  abortAlertLevel: 0,
-  abortAlertText:  '',
-  vehicles:       makeVehicles(),
-  gates:          makeGates(),
-  aamiTelemetry:  0,
-  aamiCompliance: 99.7,
-  aamiQuality:    99.8,
+  raceRunning:      false,
+  racePaused:       false,
+  raceTime:         0,
+  abortAlertLevel:  0,
+  abortAlertText:   '',
+  vehicles:         makeVehicles(),
+  gates:            makeGates(),
+  aamiTelemetry:    0,
+  aamiCompliance:   99.7,
+  aamiQuality:      99.8,
   aamiSafetyEvents: 0,
-  aamiStatus:     'ACTIVE',
-  followedId:     null,
-  showClassA:     true,
-  showClassB:     true,
+  aamiStatus:       'ACTIVE',
+  followedId:       null,
+  showClassA:       true,
+  showClassB:       true,
 
   startRace: () => {
     clearIntervals();
@@ -198,9 +311,7 @@ export const useRacing = create<RacingState>((set, get) => ({
     // AAMI telemetry: +1 every 20ms
     aamiInterval = setInterval(() => {
       if (!get().raceRunning || get().racePaused) return;
-      set(s => ({
-        aamiTelemetry: s.aamiTelemetry + 1,
-      }));
+      set(s => ({ aamiTelemetry: s.aamiTelemetry + 1 }));
     }, 20);
 
     // AAMI compliance/quality fluctuation every 2s
@@ -220,18 +331,18 @@ export const useRacing = create<RacingState>((set, get) => ({
   resetRace: () => {
     clearIntervals();
     set({
-      raceRunning:    false,
-      racePaused:     false,
-      raceTime:       0,
-      abortAlertLevel: 0,
-      abortAlertText:  '',
-      vehicles:       makeVehicles(),
-      gates:          makeGates(),
-      aamiTelemetry:  0,
-      aamiCompliance: 99.7,
-      aamiQuality:    99.8,
+      raceRunning:      false,
+      racePaused:       false,
+      raceTime:         0,
+      abortAlertLevel:  0,
+      abortAlertText:   '',
+      vehicles:         makeVehicles(),
+      gates:            makeGates(),
+      aamiTelemetry:    0,
+      aamiCompliance:   99.7,
+      aamiQuality:      99.8,
       aamiSafetyEvents: 0,
-      aamiStatus:     'ACTIVE',
+      aamiStatus:       'ACTIVE',
     });
   },
 
@@ -242,13 +353,13 @@ export const useRacing = create<RacingState>((set, get) => ({
         : s.vehicles.filter(v => v.vehicleClass === 'B');
 
       return {
-        abortAlertLevel: 1,
-        abortAlertText:  '⚠ LEVEL 1 — VEHICLE AUTO-LAND TRIGGERED',
+        abortAlertLevel:  1,
+        abortAlertText:   '⚠ LEVEL 1 — VEHICLE AUTO-LAND TRIGGERED',
         aamiSafetyEvents: s.aamiSafetyEvents + 1,
-        aamiStatus: 'REVIEWING',
+        aamiStatus:       'REVIEWING',
         vehicles: s.vehicles.map(v =>
           targets.some(t => t.id === v.id)
-            ? { ...v, aborted: true, scores: { ...v.scores, recovery: 40 } }
+            ? { ...v, aborted: true, mode: 'MAIN' as const, challengeGk: null, challengeT: 0, scores: { ...v.scores, recovery: 40 } }
             : v
         ),
       };
@@ -266,12 +377,11 @@ export const useRacing = create<RacingState>((set, get) => ({
       set(s => ({
         abortAlertLevel: 0,
         abortAlertText:  '',
-        aamiStatus: 'ACTIVE',
+        aamiStatus:      'ACTIVE',
         vehicles: s.vehicles.map(v =>
           v.aborted ? { ...v, aborted: false, abortRecovering: true } : v
         ),
       }));
-      // Clear recovering flag after 3 more seconds
       setTimeout(() => {
         set(s => ({ vehicles: s.vehicles.map(v => ({ ...v, abortRecovering: false })) }));
       }, 3000);
@@ -285,7 +395,6 @@ export const useRacing = create<RacingState>((set, get) => ({
     const vehicle = vehicles.find(v => v.id === vid);
     if (!vehicle) return;
 
-    // Find next gate after current t position
     const next = gates
       .filter(g => g.t > vehicle.t || g.id === 'G1')
       .sort((a, b) => a.t - b.t)[0];
@@ -293,7 +402,7 @@ export const useRacing = create<RacingState>((set, get) => ({
     if (!next) return;
     set(s => ({
       vehicles: s.vehicles.map(v => v.id === vid ? { ...v, t: next.t + 0.001 } : v),
-      gates: s.gates.map(g => g.id === next.id ? { ...g, status: 'ACTIVE', activeVehicleId: vid } : g),
+      gates:    s.gates.map(g => g.id === next.id ? { ...g, status: 'ACTIVE', activeVehicleId: vid } : g),
     }));
 
     setTimeout(() => {
@@ -303,59 +412,111 @@ export const useRacing = create<RacingState>((set, get) => ({
     }, 2500);
   },
 
-  setFollowed:  (id) => set({ followedId: id }),
-  setShowClassA: (v) => set({ showClassA: v }),
-  setShowClassB: (v) => set({ showClassB: v }),
+  setFollowed:   (id) => set({ followedId: id }),
+  setShowClassA: (v)  => set({ showClassA: v }),
+  setShowClassB: (v)  => set({ showClassB: v }),
 
   tick: (delta: number) => {
     const s = get();
     if (!s.raceRunning || s.racePaused) return;
 
-    const GATE_PROXIMITY = 0.04; // t-distance to trigger gate
+    const GATE_PROX = 0.04;
+    let extraSafetyEvents = 0;
 
     const updatedVehicles = s.vehicles.map(v => {
-      if (v.aborted) return v; // frozen during abort sequence
+      if (v.aborted) return v;
 
-      const newT = v.t + BASE_SPD * v.speed * delta;
+      // ── CHALLENGE MODE ───────────────────────────────────────────────────
+      if (v.mode === 'CHALLENGE' && v.challengeGk) {
+        const newCT = v.challengeT + BASE_SPD * v.speed * delta * 1.3;
+        const battery = Math.max(0, v.battery - 0.015 * delta * 60);
+
+        if (newCT >= 1) {
+          // Evaluate pass/fail and apply score delta
+          const newScores = evalChallenge(v, v.challengeGk);
+          const passed    = newScores[CHALLENGE_ROUTES[v.challengeGk]?.scoreKey ?? 'gateTime'] >
+                            v.scores[CHALLENGE_ROUTES[v.challengeGk]?.scoreKey ?? 'gateTime'];
+          if (!passed) extraSafetyEvents++;
+          const exitT = CHALLENGE_ROUTES[v.challengeGk]?.exitT ?? v.t;
+          return {
+            ...v,
+            mode:        'MAIN' as const,
+            challengeGk: null,
+            challengeT:  0,
+            t:           exitT,
+            battery,
+            scores:      newScores,
+          };
+        }
+        return { ...v, challengeT: newCT, battery };
+      }
+
+      // ── MAIN MODE ────────────────────────────────────────────────────────
+      const newT         = v.t + BASE_SPD * v.speed * delta;
       const completedLap = newT >= 1;
-      const laps = completedLap ? v.laps + 1 : v.laps;
-      const t = completedLap ? newT - 1 : newT;
-      const battery = Math.max(0, v.battery - 0.015 * delta * 60);
-      const lastLapTime = completedLap ? s.raceTime - v.lapStartTime : v.lastLapTime;
+      const laps         = completedLap ? v.laps + 1 : v.laps;
+      const t            = completedLap ? newT - 1 : newT;
+      const battery      = Math.max(0, v.battery - 0.015 * delta * 60);
+      const lastLapTime  = completedLap ? s.raceTime - v.lapStartTime : v.lastLapTime;
       const lapStartTime = completedLap ? s.raceTime : v.lapStartTime;
+      // Clear gate visits on lap completion
+      const gatesVisited = completedLap ? [] : v.gatesVisited;
 
-      // Find next gate ahead by t-distance (wrapping)
+      // Detect gate crossing (old t < gate.t <= new t), skip G1 (start/finish)
+      const crossedGate = GATE_DEFS.find(g =>
+        g.id !== 'G1' &&
+        CHALLENGE_ROUTES[g.id] !== undefined &&
+        !gatesVisited.includes(g.id) &&
+        v.t < g.t && t >= g.t
+      );
+
+      if (crossedGate) {
+        // Snap to gate, enter challenge
+        return {
+          ...v,
+          t:            crossedGate.t,
+          laps,
+          battery,
+          lastLapTime,
+          lapStartTime,
+          mode:         'CHALLENGE' as const,
+          challengeGk:  crossedGate.id,
+          challengeT:   0,
+          gatesVisited: [...gatesVisited, crossedGate.id],
+          nextGateId:   crossedGate.id,
+        };
+      }
+
+      // Find next upcoming gate (wrapping)
       const nextGate = [...GATE_DEFS].sort((a, b) => {
         const da = (a.t - t + 1) % 1;
         const db = (b.t - t + 1) % 1;
         return da - db;
       })[0];
 
-      return { ...v, t, laps, battery, lastLapTime, lapStartTime, nextGateId: nextGate?.id ?? null };
+      return { ...v, t, laps, battery, lastLapTime, lapStartTime, gatesVisited, nextGateId: nextGate?.id ?? null };
     });
 
-    // Gate proximity check
+    // Gate proximity — only MAIN-mode vehicles trigger visual gate states
     const updatedGates = s.gates.map(gate => {
       if (gate.status === 'COMPLETE') {
-        // Reset WAITING after all vehicles have passed
         const anyNear = updatedVehicles.some(v =>
-          Math.abs(v.t - gate.t) < GATE_PROXIMITY * 3
+          v.mode === 'MAIN' && Math.abs(v.t - gate.t) < GATE_PROX * 3
         );
         if (!anyNear) return { ...gate, status: 'WAITING' as GateStatus, activeVehicleId: null };
         return gate;
       }
 
       const nearVehicle = updatedVehicles.find(v =>
-        !v.aborted && Math.abs(v.t - gate.t) < GATE_PROXIMITY
+        !v.aborted && v.mode === 'MAIN' && Math.abs(v.t - gate.t) < GATE_PROX
       );
 
       if (nearVehicle && gate.status === 'WAITING') {
-        // Activate gate — complete after short delay handled by COMPLETE reset above
         return { ...gate, status: 'ACTIVE' as GateStatus, activeVehicleId: nearVehicle.id };
       }
       if (gate.status === 'ACTIVE') {
         const stillNear = updatedVehicles.some(v =>
-          !v.aborted && Math.abs(v.t - gate.t) < GATE_PROXIMITY
+          !v.aborted && v.mode === 'MAIN' && Math.abs(v.t - gate.t) < GATE_PROX
         );
         if (!stillNear) return { ...gate, status: 'COMPLETE' as GateStatus };
       }
@@ -363,9 +524,10 @@ export const useRacing = create<RacingState>((set, get) => ({
     });
 
     set({
-      vehicles: updatedVehicles,
-      gates: updatedGates,
-      raceTime: s.raceTime + delta,
+      vehicles:         updatedVehicles,
+      gates:            updatedGates,
+      raceTime:         s.raceTime + delta,
+      aamiSafetyEvents: extraSafetyEvents > 0 ? s.aamiSafetyEvents + extraSafetyEvents : s.aamiSafetyEvents,
     });
   },
 }));

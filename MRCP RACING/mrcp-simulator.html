@@ -86,15 +86,27 @@
     }
     #mission-overlay {
       position: absolute; top: 20px; left: 20px;
-      background: rgba(13,26,53,0.93); border: 1px solid var(--cyan);
+      background: rgba(13,26,53,0.95); border: 1px solid var(--cyan);
       border-radius: 6px; padding: 10px 14px; font-size: 11px;
-      display: none; z-index: 50; min-width: 170px;
+      display: none; z-index: 50; min-width: 240px; max-width: 300px;
     }
     #mission-overlay.active { display: block; animation: fadeIn 0.3s ease; }
     #mission-gate-label { color: var(--cyan); font-size: 10px; font-weight: bold; margin-bottom: 3px; }
     #mission-phase { color: var(--gold); font-size: 9px; margin-bottom: 4px; }
-    #mission-class-a { color: var(--orange); font-size: 10px; }
-    #mission-class-b { color: var(--cyan); font-size: 10px; margin-top: 2px; }
+    #mission-class-a { color: var(--orange); font-size: 9px; line-height: 1.5; }
+    #mission-class-b { color: var(--cyan); font-size: 9px; margin-top: 2px; line-height: 1.5; }
+    #mission-challenge-title {
+      color: var(--gold); font-size: 10px; font-weight: bold;
+      margin-top: 6px; padding-top: 5px;
+      border-top: 1px solid rgba(0,212,255,0.2);
+    }
+    #mission-challenge-desc { color: var(--muted); font-size: 8px; margin-top: 2px; margin-bottom: 4px; line-height: 1.5; }
+    #challenge-result {
+      font-size: 11px; font-weight: bold; letter-spacing: 1px;
+      margin-top: 4px; display: none;
+    }
+    #challenge-result.pass { color: var(--green); animation: fadeIn 0.25s ease; }
+    #challenge-result.fail { color: var(--red);   animation: fadeIn 0.25s ease; }
 
     #gate-hover-card {
       position: absolute; background: var(--card); border: 1px solid var(--gate-bg);
@@ -267,6 +279,9 @@
       <div id="mission-phase"></div>
       <div id="mission-class-a"></div>
       <div id="mission-class-b"></div>
+      <div id="mission-challenge-title"></div>
+      <div id="mission-challenge-desc"></div>
+      <div id="challenge-result"></div>
     </div>
     <div id="sponsor-banner">⚡ POWER SECTOR · MRSSP EXECUTION PHASE · ALPHA EDGE PLATFORM</div>
     <div id="gate-hover-card"></div>
@@ -362,12 +377,30 @@
 const W = 800, H = 550;
 
 const GATES = {
-  G1:     { x:0.15, y:0.25, name:'Recon Sector',      mrssp:'Discovery',    color:'#8A9BB5', ca:'Visual recon sweep',   cb:'Sensor array scan'  },
-  G2:     { x:0.40, y:0.10, name:'Technical Zone',     mrssp:'Assessment',   color:'#00D4FF', ca:'Manual precision run',  cb:'AI path optimize'   },
-  G3:     { x:0.70, y:0.20, name:'Strategy Waypoint',  mrssp:'Road-Map',     color:'#00D4FF', ca:'Pilot decision point',  cb:'Route computation'  },
-  G4:     { x:0.85, y:0.55, name:'Power Sector',       mrssp:'Execution',    color:'#FF6B00', ca:'Full throttle run',     cb:'Max velocity AI'    },
-  G5:     { x:0.65, y:0.80, name:'Final Push',         mrssp:'Optimization', color:'#FF6B00', ca:'Final climb sprint',    cb:'Endurance mode AI'  },
-  FINISH: { x:0.20, y:0.75, name:'Data Capture',       mrssp:'Closure',      color:'#00FF88', ca:'Debrief & descent',    cb:'Full data upload'   },
+  G1:     { x:0.15, y:0.25, name:'Recon Sector',      mrssp:'Discovery',    color:'#8A9BB5',
+            ca:'Visual recon sweep — confirm no NAS conflicts on approach',
+            cb:'Sensor array scan — auto-validate sector via MRSS telemetry',
+            challenge:{ title:'MRSS Ring Entry Auth',      desc:'Validate LA Ring sector clearance before entry — LA Pilot C1',        scoreKey:'mission_precision', passBonus:6, failPenalty:9  }},
+  G2:     { x:0.40, y:0.10, name:'Technical Zone',     mrssp:'Assessment',   color:'#00D4FF',
+            ca:'Manual precision run — maintain flight envelope within LA Ring bands',
+            cb:'AI path optimize — minimize energy draw vs. distance logged',
+            challenge:{ title:'Energy Budget Checkpoint', desc:'Stay within LA Ring efficiency bands — MRSS consumption threshold',     scoreKey:'energy_efficiency', passBonus:5, failPenalty:8  }},
+  G3:     { x:0.70, y:0.20, name:'Strategy Waypoint',  mrssp:'Road-Map',     color:'#00D4FF',
+            ca:'Pilot decision point — select optimal routing under TRACON constraints',
+            cb:'Route computation — AI selects fastest compliant path through NAS corridor',
+            challenge:{ title:'TRACON Routing Decision',  desc:'Route selection under LA TRACON constraints — response speed scored',  scoreKey:'decision_speed',    passBonus:6, failPenalty:9  }},
+  G4:     { x:0.85, y:0.55, name:'Power Sector',       mrssp:'Execution',    color:'#FF6B00',
+            ca:'Full throttle run — maintain max speed within authorized MRSS corridor',
+            cb:'Max velocity AI — execute within authorized MRSS speed window',
+            challenge:{ title:'Max Performance Window',   desc:'Full-throttle run within MRSS authorized speed corridor',             scoreKey:'gate_time',         passBonus:7, failPenalty:10 }},
+  G5:     { x:0.65, y:0.80, name:'Final Push',         mrssp:'Optimization', color:'#FF6B00',
+            ca:'Final climb sprint — confirm abort-recovery readiness before approach',
+            cb:'Endurance mode AI — validate recovery protocol before data submission',
+            challenge:{ title:'Recovery Protocol Check',  desc:'Confirm abort-recovery readiness before final approach',              scoreKey:'recovery_index',    passBonus:5, failPenalty:8  }},
+  FINISH: { x:0.20, y:0.75, name:'Data Capture',       mrssp:'Closure',      color:'#00FF88',
+            ca:'Debrief & descent — upload full telemetry to MRSS blockchain',
+            cb:'Full data upload — AAMI certification data stream confirmed',
+            challenge:{ title:'AAMI Data Submission',     desc:'Full telemetry upload to MRSS blockchain — LA Pilot C1 record filed', scoreKey:'composite',         passBonus:3, failPenalty:5  }},
 };
 const GK = ['G1','G2','G3','G4','G5','FINISH'];
 
@@ -707,7 +740,7 @@ function activateGate(gk, v) {
   const pill = document.getElementById(`gp-${gk}`);
   if (pill) pill.className = 'gate-pill gate-active';
   setGateSVG(gk, 'A');
-  showMissionOverlay(gk);
+  showMissionOverlay(gk, v);
   if (gk === 'G4') showSponsor();
   const nxt = GK[(GK.indexOf(gk)+1)%6];
   document.getElementById('aa-audit').textContent = nxt;
@@ -755,15 +788,65 @@ function setGateSVG(gk, state) {
   }
 }
 
-function showMissionOverlay(gk) {
+function evalChallenge(gk, v) {
+  const ch = GATES[gk].challenge;
+  if (!ch) return;
+  const s = v.scores;
+  // Class B gets +5 threshold advantage on decision_speed and recovery_index
+  const threshold = 72 + (v.cls==='B' && (ch.scoreKey==='decision_speed'||ch.scoreKey==='recovery_index') ? 5 : 0);
+  const curVal = ch.scoreKey === 'composite' ? s.composite : s[ch.scoreKey];
+  const pass = curVal >= threshold;
+
+  if (pass) {
+    if (ch.scoreKey === 'composite') {
+      ['gate_time','mission_precision','energy_efficiency','decision_speed','recovery_index']
+        .forEach(k => { s[k] = clamp(s[k] + ch.passBonus, 0, 100); });
+    } else {
+      s[ch.scoreKey] = clamp(s[ch.scoreKey] + ch.passBonus, 0, 100);
+    }
+  } else {
+    if (ch.scoreKey === 'composite') {
+      ['gate_time','mission_precision','energy_efficiency','decision_speed','recovery_index']
+        .forEach(k => { s[k] = clamp(s[k] - ch.failPenalty, 0, 100); });
+    } else {
+      s[ch.scoreKey] = clamp(s[ch.scoreKey] - ch.failPenalty, 0, 100);
+    }
+    AAMI.safe++;
+    document.getElementById('aa-safe').textContent = AAMI.safe;
+    setAAMIStatus('REVIEWING');
+  }
+  s.composite = calcComposite(s);
+
+  const res = document.getElementById('challenge-result');
+  const dimLabel = ch.scoreKey.replace(/_/g,' ').toUpperCase();
+  res.style.display = 'block';
+  if (pass) {
+    res.className = 'pass';
+    res.textContent = `✓ PASS  +${ch.passBonus}  ${dimLabel}`;
+  } else {
+    res.className = 'fail';
+    res.textContent = `✗ FAIL  −${ch.failPenalty}  ${dimLabel}`;
+  }
+}
+
+function showMissionOverlay(gk, v) {
   const g = GATES[gk];
+  const res = document.getElementById('challenge-result');
+  res.style.display = 'none'; res.className = '';
+
   document.getElementById('mission-gate-label').textContent = `⚡ ${gk} ACTIVE — ${g.name.toUpperCase()}`;
   document.getElementById('mission-phase').textContent   = `MRSSP PHASE: ${g.mrssp}`;
   document.getElementById('mission-class-a').textContent = `🟠 ${g.ca}`;
   document.getElementById('mission-class-b').textContent = `🔵 ${g.cb}`;
+  if (g.challenge) {
+    document.getElementById('mission-challenge-title').textContent = `⚑ CHALLENGE: ${g.challenge.title}`;
+    document.getElementById('mission-challenge-desc').textContent  = g.challenge.desc;
+  }
   const mo = document.getElementById('mission-overlay');
   mo.classList.add('active');
-  setTimeout(() => mo.classList.remove('active'), 3000);
+  // Evaluate challenge for the triggering vehicle after brief display delay
+  if (v) setTimeout(() => evalChallenge(gk, v), 600);
+  setTimeout(() => mo.classList.remove('active'), 3500);
 }
 
 function showSponsor() {

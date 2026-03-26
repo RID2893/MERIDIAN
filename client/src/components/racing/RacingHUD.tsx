@@ -1,7 +1,7 @@
-import type { CSSProperties } from "react";
+import { type CSSProperties, useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useShallow } from "zustand/react/shallow";
-import { useRacing } from "@/lib/stores/useRacing";
+import { useRacing, CHALLENGE_ROUTES } from "@/lib/stores/useRacing";
 
 // ─── Colour helpers ────────────────────────────────────────────────────────
 function scoreColor(v: number): string {
@@ -11,22 +11,29 @@ function scoreColor(v: number): string {
 }
 
 function fmtTime(s: number): string {
-  const m = Math.floor(s / 60);
+  const m  = Math.floor(s / 60);
   const ss = Math.floor(s % 60).toString().padStart(2, '0');
   return `${m}:${ss}`;
 }
 
 function fmtHMS(s: number): string {
-  const h = Math.floor(s / 3600).toString().padStart(2, '0');
-  const m = Math.floor((s % 3600) / 60).toString().padStart(2, '0');
+  const h  = Math.floor(s / 3600).toString().padStart(2, '0');
+  const m  = Math.floor((s % 3600) / 60).toString().padStart(2, '0');
   const ss = Math.floor(s % 60).toString().padStart(2, '0');
   return `${h}:${m}:${ss}`;
 }
 
-// ─── Shared card style ────────────────────────────────────────────────────
+function hexToRgb(hex: string): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+}
+
+// ─── Shared styles — glassmorphism panels ─────────────────────────────────
 const CARD: CSSProperties = {
-  background: '#0D1A35',
-  border: '1px solid #1A2A4A',
+  background: 'rgba(4, 12, 28, 0.82)',
+  backdropFilter: 'blur(12px)',
+  WebkitBackdropFilter: 'blur(12px)',
+  border: '1px solid rgba(0, 212, 255, 0.12)',
   borderRadius: '6px',
   padding: '10px 12px',
   marginBottom: '8px',
@@ -69,36 +76,75 @@ function ScoresPanel() {
           </tr>
         </thead>
         <tbody>
-          {vehicles.map(v => (
-            <tr key={v.id} style={{ opacity: v.aborted ? 0.5 : 1 }}>
-              <td style={{ padding: '3px 4px', color: v.vehicleClass === 'A' ? '#FF6B00' : '#00D4FF' }}>
-                <div>{v.vehicleClass === 'A' ? '🟠' : '🔵'} {v.id}
-                  {v.nextGateId && <span style={{ color: '#444', marginLeft: '4px' }}>→{v.nextGateId}</span>}
-                </div>
-                {/* Battery bar */}
-                <div style={{ marginTop: '2px', height: '2px', background: '#0a1525', borderRadius: '1px' }}>
-                  <div style={{
-                    width: `${v.battery}%`,
-                    height: '100%',
-                    background: v.battery > 50 ? '#00FF88' : v.battery > 20 ? '#FFB800' : '#FF3B5C',
-                    borderRadius: '1px',
-                    transition: 'width 0.5s',
-                  }} />
-                </div>
-              </td>
-              <td style={{ padding: '3px 2px', textAlign: 'center', color: '#ccc' }}>{v.scores.gateTime.toFixed(0)}</td>
-              <td style={{ padding: '3px 2px', textAlign: 'center', color: '#ccc' }}>{v.scores.precision.toFixed(0)}</td>
-              <td style={{ padding: '3px 2px', textAlign: 'center', color: '#ccc' }}>{v.scores.efficiency.toFixed(0)}</td>
-              <td style={{ padding: '3px 2px', textAlign: 'center', color: '#ccc' }}>{v.scores.decision.toFixed(0)}</td>
-              <td style={{ padding: '3px 2px', textAlign: 'center', color: scoreColor(v.scores.recovery) }}>{v.scores.recovery.toFixed(0)}</td>
-              <td style={{ padding: '3px 2px', textAlign: 'center', fontWeight: 'bold', color: scoreColor(v.scores.composite) }}>
-                {v.aborted ? 'ABRT' : v.scores.composite.toFixed(1)}
-              </td>
-              <td style={{ padding: '3px 2px', textAlign: 'center', color: '#8A9BB5', fontSize: '8px' }}>
-                {fmtLapDelta(v.lastLapTime)}
-              </td>
-            </tr>
-          ))}
+          {vehicles.map(v => {
+            const inChallenge = v.mode === 'CHALLENGE' && v.challengeGk;
+            const cr = inChallenge ? CHALLENGE_ROUTES[v.challengeGk!] : null;
+            return (
+              <tr
+                key={v.id}
+                style={{
+                  opacity: v.aborted ? 0.5 : 1,
+                  background: inChallenge
+                    ? 'rgba(255, 184, 0, 0.10)'
+                    : 'transparent',
+                  transition: 'background 0.3s',
+                }}
+              >
+                <td style={{ padding: '3px 4px', color: v.vehicleClass === 'A' ? '#FF6B00' : '#00D4FF' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>{v.vehicleClass === 'A' ? '🟠' : '🔵'} {v.id}</span>
+                    {inChallenge && cr && (
+                      <span style={{
+                        color: '#FFB800',
+                        fontSize: '7px',
+                        fontFamily: "'Orbitron', monospace",
+                        letterSpacing: '0.5px',
+                        animation: 'pulse 0.8s infinite',
+                      }}>
+                        ⚡{v.challengeGk}
+                      </span>
+                    )}
+                    {!inChallenge && v.nextGateId && (
+                      <span style={{ color: '#333', marginLeft: '2px', fontSize: '8px' }}>→{v.nextGateId}</span>
+                    )}
+                  </div>
+                  {/* Battery bar */}
+                  <div style={{ marginTop: '2px', height: '2px', background: '#0a1525', borderRadius: '1px' }}>
+                    <div style={{
+                      width: `${v.battery}%`,
+                      height: '100%',
+                      background: v.battery > 50 ? '#00FF88' : v.battery > 20 ? '#FFB800' : '#FF3B5C',
+                      borderRadius: '1px',
+                      transition: 'width 0.5s',
+                    }} />
+                  </div>
+                  {/* Challenge progress bar */}
+                  {inChallenge && (
+                    <div style={{ marginTop: '2px', height: '2px', background: 'rgba(255,184,0,0.15)', borderRadius: '1px' }}>
+                      <div style={{
+                        width: `${v.challengeT * 100}%`,
+                        height: '100%',
+                        background: '#FFB800',
+                        borderRadius: '1px',
+                        transition: 'width 0.1s',
+                      }} />
+                    </div>
+                  )}
+                </td>
+                <td style={{ padding: '3px 2px', textAlign: 'center', color: '#ccc' }}>{v.scores.gateTime.toFixed(0)}</td>
+                <td style={{ padding: '3px 2px', textAlign: 'center', color: '#ccc' }}>{v.scores.precision.toFixed(0)}</td>
+                <td style={{ padding: '3px 2px', textAlign: 'center', color: '#ccc' }}>{v.scores.efficiency.toFixed(0)}</td>
+                <td style={{ padding: '3px 2px', textAlign: 'center', color: '#ccc' }}>{v.scores.decision.toFixed(0)}</td>
+                <td style={{ padding: '3px 2px', textAlign: 'center', color: scoreColor(v.scores.recovery) }}>{v.scores.recovery.toFixed(0)}</td>
+                <td style={{ padding: '3px 2px', textAlign: 'center', fontWeight: 'bold', color: scoreColor(v.scores.composite) }}>
+                  {v.aborted ? 'ABRT' : v.scores.composite.toFixed(1)}
+                </td>
+                <td style={{ padding: '3px 2px', textAlign: 'center', color: '#8A9BB5', fontSize: '8px' }}>
+                  {fmtLapDelta(v.lastLapTime)}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -150,19 +196,29 @@ function Leaderboard() {
     if (lapDiff !== 0) return lapDiff;
     return b.t - a.t;
   });
-
   const maxScore = Math.max(...vehicles.map(v => v.scores.composite));
 
   return (
     <div style={CARD}>
       <div style={SECTION_TITLE}>Leaderboard</div>
       {sorted.map((v, i) => (
-        <div key={v.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '5px', gap: '6px' }}>
+        <div
+          key={v.id}
+          style={{
+            display: 'flex', alignItems: 'center', marginBottom: '5px', gap: '6px',
+            background: v.mode === 'CHALLENGE' ? 'rgba(255,184,0,0.07)' : 'transparent',
+            borderRadius: '3px', padding: '1px 2px',
+            transition: 'background 0.3s',
+          }}
+        >
           <span style={{ color: '#666', fontSize: '9px', width: '12px', fontFamily: "'Courier New', monospace" }}>
             #{i + 1}
           </span>
           <span style={{ color: v.vehicleClass === 'A' ? '#FF6B00' : '#00D4FF', fontSize: '9px', fontFamily: "'Courier New', monospace", width: '88px' }}>
             {v.id}
+            {v.mode === 'CHALLENGE' && (
+              <span style={{ color: '#FFB800', fontSize: '7px', marginLeft: '3px' }}>⚡</span>
+            )}
           </span>
           <div style={{ flex: 1, background: '#0a1525', borderRadius: '2px', height: '6px' }}>
             <div style={{
@@ -187,14 +243,15 @@ function Leaderboard() {
 
 // ─── AAMI Panel ───────────────────────────────────────────────────────────
 function AAMIPanel() {
-  const { aamiTelemetry, aamiCompliance, aamiQuality, aamiSafetyEvents, aamiStatus, raceTime } = useRacing(useShallow(s => ({
-    aamiTelemetry:    s.aamiTelemetry,
-    aamiCompliance:   s.aamiCompliance,
-    aamiQuality:      s.aamiQuality,
-    aamiSafetyEvents: s.aamiSafetyEvents,
-    aamiStatus:       s.aamiStatus,
-    raceTime:         s.raceTime,
-  })));
+  const { aamiTelemetry, aamiCompliance, aamiQuality, aamiSafetyEvents, aamiStatus, raceTime } =
+    useRacing(useShallow(s => ({
+      aamiTelemetry:    s.aamiTelemetry,
+      aamiCompliance:   s.aamiCompliance,
+      aamiQuality:      s.aamiQuality,
+      aamiSafetyEvents: s.aamiSafetyEvents,
+      aamiStatus:       s.aamiStatus,
+      raceTime:         s.raceTime,
+    })));
 
   const statusColor: Record<string, string> = {
     ACTIVE:    '#00FF88',
@@ -203,8 +260,8 @@ function AAMIPanel() {
   };
 
   return (
-    <div style={{ ...CARD, border: '1px solid #3A1A5A' }}>
-      <div style={{ ...SECTION_TITLE, color: '#8B5CF6' }}>🏛️ AAMI Certification</div>
+    <div style={{ ...CARD, border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+      <div style={{ ...SECTION_TITLE, color: '#8B5CF6' }}>🏛 AAMI Certification</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '9px', fontFamily: "'Courier New', monospace" }}>
         <div>
           <div style={{ color: '#666', marginBottom: '2px' }}>TELEMETRY</div>
@@ -231,8 +288,65 @@ function AAMIPanel() {
           <div style={{ color: statusColor[aamiStatus], fontWeight: 'bold' }}>{aamiStatus}</div>
         </div>
       </div>
-      <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #1A2A4A', color: '#444', fontSize: '8px', textAlign: 'center', fontFamily: "'Courier New', monospace" }}>
+      <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid rgba(0,212,255,0.08)', color: '#444', fontSize: '8px', textAlign: 'center', fontFamily: "'Courier New', monospace" }}>
         FAA · EASA · CASA
+      </div>
+    </div>
+  );
+}
+
+// ─── Challenge Result Flash ────────────────────────────────────────────────
+function ChallengeResultFlash() {
+  const vehicles = useRacing(s => s.vehicles);
+  const prevModeRef = useRef<Record<string, string>>({});
+  const prevGkRef   = useRef<Record<string, string | null>>({});
+  const timerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [flash, setFlash] = useState<{ vehicleName: string; gk: string; title: string } | null>(null);
+
+  useEffect(() => {
+    for (const v of vehicles) {
+      const prev   = prevModeRef.current[v.id];
+      const prevGk = prevGkRef.current[v.id];
+      if (prev === 'CHALLENGE' && v.mode === 'MAIN' && prevGk) {
+        const cr = CHALLENGE_ROUTES[prevGk];
+        if (timerRef.current) clearTimeout(timerRef.current);
+        setFlash({ vehicleName: v.name, gk: prevGk, title: cr?.title ?? prevGk });
+        timerRef.current = setTimeout(() => setFlash(null), 2800);
+      }
+      prevModeRef.current[v.id] = v.mode;
+      prevGkRef.current[v.id]   = v.challengeGk;
+    }
+  }, [vehicles]);
+
+  if (!flash) return null;
+
+  return (
+    <div style={{
+      position: 'absolute',
+      top: '80px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      background: 'rgba(4, 12, 28, 0.90)',
+      backdropFilter: 'blur(14px)',
+      WebkitBackdropFilter: 'blur(14px)',
+      border: '1px solid rgba(255, 184, 0, 0.45)',
+      borderRadius: '8px',
+      padding: '10px 24px',
+      textAlign: 'center',
+      pointerEvents: 'none',
+      zIndex: 200,
+      animation: 'fadeInOut 2.8s ease forwards',
+      whiteSpace: 'nowrap',
+    }}>
+      <div style={{ color: '#FFB800', fontSize: '8px', letterSpacing: '3px', fontFamily: "'Orbitron', monospace", marginBottom: '4px' }}>
+        ⚡ CHALLENGE SECTOR COMPLETE
+      </div>
+      <div style={{ color: '#fff', fontSize: '11px', fontFamily: "'Orbitron', monospace", letterSpacing: '1px' }}>
+        {flash.gk} · {flash.title.toUpperCase()}
+      </div>
+      <div style={{ color: '#8A9BB5', fontSize: '8px', fontFamily: "'Courier New', monospace", marginTop: '3px' }}>
+        {flash.vehicleName}
       </div>
     </div>
   );
@@ -240,25 +354,27 @@ function AAMIPanel() {
 
 // ─── Control Bar ─────────────────────────────────────────────────────────
 function ControlBar() {
-  const { raceRunning, racePaused, startRace, pauseRace, resetRace, triggerAbort, forceGate, vehicles } = useRacing(useShallow(s => ({
-    raceRunning:  s.raceRunning,
-    racePaused:   s.racePaused,
-    startRace:    s.startRace,
-    pauseRace:    s.pauseRace,
-    resetRace:    s.resetRace,
-    triggerAbort: s.triggerAbort,
-    forceGate:    s.forceGate,
-    vehicles:     s.vehicles,
-  })));
+  const { raceRunning, racePaused, startRace, pauseRace, resetRace, triggerAbort, forceGate, vehicles } =
+    useRacing(useShallow(s => ({
+      raceRunning:  s.raceRunning,
+      racePaused:   s.racePaused,
+      startRace:    s.startRace,
+      pauseRace:    s.pauseRace,
+      resetRace:    s.resetRace,
+      triggerAbort: s.triggerAbort,
+      forceGate:    s.forceGate,
+      vehicles:     s.vehicles,
+    })));
 
-  const { followedId, showClassA, showClassB, setFollowed, setShowClassA, setShowClassB } = useRacing(useShallow(s => ({
-    followedId:    s.followedId,
-    showClassA:    s.showClassA,
-    showClassB:    s.showClassB,
-    setFollowed:   s.setFollowed,
-    setShowClassA: s.setShowClassA,
-    setShowClassB: s.setShowClassB,
-  })));
+  const { followedId, showClassA, showClassB, setFollowed, setShowClassA, setShowClassB } =
+    useRacing(useShallow(s => ({
+      followedId:    s.followedId,
+      showClassA:    s.showClassA,
+      showClassB:    s.showClassB,
+      setFollowed:   s.setFollowed,
+      setShowClassA: s.setShowClassA,
+      setShowClassB: s.setShowClassB,
+    })));
 
   const btn = (
     label: string,
@@ -293,8 +409,10 @@ function ControlBar() {
       left: 0,
       right: '360px',
       height: '60px',
-      background: 'rgba(4,8,16,0.92)',
-      borderTop: '1px solid #1A2A4A',
+      background: 'rgba(4, 8, 16, 0.88)',
+      backdropFilter: 'blur(10px)',
+      WebkitBackdropFilter: 'blur(10px)',
+      borderTop: '1px solid rgba(0, 212, 255, 0.10)',
       display: 'flex',
       alignItems: 'center',
       gap: '8px',
@@ -308,15 +426,14 @@ function ControlBar() {
       {btn('🚨 ABORT', () => triggerAbort(), '#FF3B5C', !raceRunning)}
       {btn('⚡ FORCE GATE', forceGate, '#FFB800', !raceRunning || racePaused)}
 
-      <div style={{ width: '1px', background: '#1A2A4A', height: '28px', margin: '0 4px' }} />
+      <div style={{ width: '1px', background: 'rgba(0,212,255,0.15)', height: '28px', margin: '0 4px' }} />
 
-      {/* Follow dropdown */}
       <select
         value={followedId ?? ''}
         onChange={e => setFollowed(e.target.value || null)}
         style={{
-          background: '#0D1A35',
-          border: '1px solid #1A2A4A',
+          background: 'rgba(4,12,28,0.85)',
+          border: '1px solid rgba(0,212,255,0.15)',
           color: '#ccc',
           padding: '4px 8px',
           borderRadius: '4px',
@@ -331,7 +448,6 @@ function ControlBar() {
         ))}
       </select>
 
-      {/* Class toggles */}
       <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '9px', color: '#FF6B00', fontFamily: "'Courier New', monospace" }}>
         <input type="checkbox" checked={showClassA} onChange={e => setShowClassA(e.target.checked)} />
         Class A
@@ -342,11 +458,6 @@ function ControlBar() {
       </label>
     </div>
   );
-}
-
-function hexToRgb(hex: string): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
 }
 
 // ─── Abort Alert Banner ───────────────────────────────────────────────────
@@ -365,6 +476,8 @@ function AbortBanner() {
       left: '50%',
       transform: 'translateX(-50%)',
       background: 'rgba(255,59,92,0.15)',
+      backdropFilter: 'blur(10px)',
+      WebkitBackdropFilter: 'blur(10px)',
       border: '1px solid #FF3B5C',
       color: '#FF3B5C',
       padding: '8px 24px',
@@ -395,15 +508,17 @@ function RacingHeader() {
     return ld !== 0 ? ld : b.t - a.t;
   })[0];
 
+  const challengeCount = vehicles.filter(v => v.mode === 'CHALLENGE').length;
+
   return (
     <div style={{
       position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
+      top: 0, left: 0, right: 0,
       height: '54px',
-      background: 'rgba(4,8,16,0.94)',
-      borderBottom: '1px solid #1A2A4A',
+      background: 'rgba(4, 8, 16, 0.90)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      borderBottom: '1px solid rgba(0, 212, 255, 0.12)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -424,6 +539,11 @@ function RacingHeader() {
             LAP {leader.laps + 1} · LEADER: {leader.id}
           </span>
         )}
+        {challengeCount > 0 && (
+          <span style={{ fontSize: '9px', color: '#FFB800', fontFamily: "'Orbitron', monospace", letterSpacing: '1px', animation: 'pulse 0.8s infinite' }}>
+            ⚡ {challengeCount} IN SECTOR
+          </span>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -436,7 +556,7 @@ function RacingHeader() {
           onClick={() => navigate('/')}
           style={{
             background: 'rgba(0,255,255,0.06)',
-            border: '1px solid rgba(0,255,255,0.3)',
+            border: '1px solid rgba(0,255,255,0.25)',
             color: '#00D4FF',
             padding: '4px 14px',
             borderRadius: '4px',
@@ -458,12 +578,12 @@ function RightPanel() {
   return (
     <div style={{
       position: 'absolute',
-      top: '54px',
-      right: 0,
-      bottom: '60px',
+      top: '54px', right: 0, bottom: '60px',
       width: '360px',
-      background: 'rgba(4,8,16,0.92)',
-      borderLeft: '1px solid #1A2A4A',
+      background: 'rgba(4, 8, 16, 0.78)',
+      backdropFilter: 'blur(14px)',
+      WebkitBackdropFilter: 'blur(14px)',
+      borderLeft: '1px solid rgba(0, 212, 255, 0.10)',
       overflowY: 'auto',
       padding: '10px',
     }}>
@@ -479,19 +599,24 @@ function RightPanel() {
 export function RacingHUD() {
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-      {/* Children with pointer events re-enabled */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}>
         <RacingHeader />
         <AbortBanner />
         <RightPanel />
         <ControlBar />
+        <ChallengeResultFlash />
       </div>
 
-      {/* Keyframe animations */}
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.4; }
+        }
+        @keyframes fadeInOut {
+          0%   { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+          12%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+          80%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+          100% { opacity: 0; transform: translateX(-50%) translateY(-4px); }
         }
       `}</style>
     </div>

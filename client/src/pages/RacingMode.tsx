@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
-import { EffectComposer, Bloom } from "@react-three/postprocessing";
+import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import { RacingScene } from "@/components/racing/RacingScene";
 import { RacingHUD } from "@/components/racing/RacingHUD";
 
@@ -28,7 +28,7 @@ export function RacingMode() {
     <div style={{ position: 'fixed', inset: 0, background: '#040810' }}>
       <Canvas
         shadows
-        camera={{ position: [0, 18, 22], fov: 55, near: 0.1, far: 100 }}
+        camera={{ position: [0, 12, 18], fov: 55, near: 0.1, far: 120 }}
         gl={{ antialias: true, powerPreference: 'default', alpha: false }}
         dpr={[1, 2]}
       >
@@ -36,11 +36,12 @@ export function RacingMode() {
           <RacingScene />
           <EffectComposer>
             <Bloom
-              luminanceThreshold={0.7}
-              intensity={1.2}
+              luminanceThreshold={0.35}
+              intensity={2.0}
               mipmapBlur
-              radius={0.4}
+              radius={0.5}
             />
+            <Vignette eskil={false} offset={0.3} darkness={0.7} />
           </EffectComposer>
         </Suspense>
       </Canvas>

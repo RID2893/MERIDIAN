@@ -48,7 +48,7 @@ interface ChallengeRoute {
 }
 
 export const CHALLENGE_ROUTES: Record<string, ChallengeRoute> = {
-  // G2 — ring entry [0,0]: detour into lower ring interior
+  // G2 — ring entry [0,0]: banked arc sweep inside lower ring interior
   G2: {
     title:       'Energy Budget Checkpoint',
     desc:        'Navigate the efficiency corridor inside the ring entry',
@@ -56,10 +56,10 @@ export const CHALLENGE_ROUTES: Record<string, ChallengeRoute> = {
     passBonus:   5,
     failPenalty: 8,
     exitT:       0.15,
-    routeA: [[0,0], [2,-1], [4,-2.5], [4,-5], [2.5,-4], [1,-2.5], [0,-1.5]],
-    routeB: [[0,0], [-2,-1.2], [-3.5,-2.5], [-3,-5], [-1.5,-4], [0,-2.5]],
+    routeA: [[0,0], [3,-0.5], [5,-3], [4.5,-5], [3,-4], [1,-2.5], [0,-1.5]],
+    routeB: [[0,0], [-3,-0.5], [-5,-3], [-4.5,-5], [-3,-4], [-1,-2.5], [0,-1.5]],
   },
-  // G3 — right apex [5,-5]: loop inside upper-right ring quadrant
+  // G3 — right apex [5,-5]: deep loop inside upper-right quadrant
   G3: {
     title:       'Max Performance Window',
     desc:        'Full-throttle run through the right-side power sector',
@@ -67,10 +67,10 @@ export const CHALLENGE_ROUTES: Record<string, ChallengeRoute> = {
     passBonus:   7,
     failPenalty: 10,
     exitT:       0.32,
-    routeA: [[5,-5], [4.5,-2.5], [3,-1], [1,-2], [0.5,-5], [1.5,-8], [4,-9], [5,-7], [5,-5]],
-    routeB: [[5,-5], [3.5,-3], [2,-2], [1,-4.5], [2,-7.5], [4,-8.5], [5,-5]],
+    routeA: [[5,-5], [4,-2], [2.5,-0.5], [0.5,-1.5], [0,-4], [1,-7], [3.5,-9], [5,-7], [5,-5]],
+    routeB: [[5,-5], [3.5,-3], [2,-1.5], [0.5,-3], [1,-6], [3,-8], [5,-5]],
   },
-  // G4 — left apex [-5,-5]: loop inside upper-left ring quadrant (mirror of G3)
+  // G4 — left apex [-5,-5]: mirror of G3 in upper-left quadrant
   G4: {
     title:       'TRACON Routing Decision',
     desc:        'Precision routing through LA TRACON constraints',
@@ -78,10 +78,10 @@ export const CHALLENGE_ROUTES: Record<string, ChallengeRoute> = {
     passBonus:   6,
     failPenalty: 9,
     exitT:       0.72,
-    routeA: [[-5,-5], [-4.5,-2.5], [-3,-1], [-1,-2], [-0.5,-5], [-1.5,-8], [-4,-9], [-5,-7], [-5,-5]],
-    routeB: [[-5,-5], [-3.5,-3], [-2,-2], [-1,-4.5], [-2,-7.5], [-4,-8.5], [-5,-5]],
+    routeA: [[-5,-5], [-4,-2], [-2.5,-0.5], [-0.5,-1.5], [0,-4], [-1,-7], [-3.5,-9], [-5,-7], [-5,-5]],
+    routeB: [[-5,-5], [-3.5,-3], [-2,-1.5], [-0.5,-3], [-1,-6], [-3,-8], [-5,-5]],
   },
-  // G5 — ring exit [0,0]: weave up the return straight
+  // G5 — ring exit [0,0]: wide S-curve up the return straight
   G5: {
     title:       'Recovery Protocol Check',
     desc:        'Verify abort-recovery readiness on the return approach',
@@ -89,8 +89,8 @@ export const CHALLENGE_ROUTES: Record<string, ChallengeRoute> = {
     passBonus:   5,
     failPenalty: 8,
     exitT:       0.97,
-    routeA: [[0,0], [2,1.5], [3,4], [2,7], [0,9]],
-    routeB: [[0,0], [-2,1.5], [-3,4], [-2,7], [0,9]],
+    routeA: [[0,0], [2.5,1.5], [3.5,4], [2.5,6.5], [0,9]],
+    routeB: [[0,0], [-2.5,1.5], [-3.5,4], [-2.5,6.5], [0,9]],
   },
 };
 

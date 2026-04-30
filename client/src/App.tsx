@@ -10,6 +10,7 @@ import { PilotApp } from "./pages/PilotApp";
 import { OperatorDashboard } from "./pages/OperatorDashboard";
 import { AdminPortal } from "./pages/AdminPortal";
 import { RacingMode } from "./pages/RacingMode";
+import { RingFlowSimulator } from "./pages/RingFlowSimulator";
 
 function LoadingScreen() {
   return (
@@ -93,6 +94,7 @@ function App() {
       <Route path="/operator" component={OperatorDashboard} />
       <Route path="/admin" component={AdminPortal} />
       <Route path="/racing" component={RacingMode} />
+      <Route path="/ring-flow" component={RingFlowSimulator} />
       <Route component={Simulator} />
     </Switch>
   );

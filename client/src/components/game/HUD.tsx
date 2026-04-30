@@ -141,6 +141,25 @@ function Header() {
         >
           🏁 RACING
         </button>
+        <button
+          onClick={() => navigate('/ring-flow')}
+          style={{
+            background: "rgba(20,184,166,0.08)",
+            border: "1px solid rgba(20,184,166,0.3)",
+            color: "#14b8a6",
+            padding: "4px 14px",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "9px",
+            letterSpacing: "2px",
+            fontFamily: "'Orbitron', monospace",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.background = "rgba(20,184,166,0.18)"; }}
+          onMouseLeave={(e) => { (e.target as HTMLButtonElement).style.background = "rgba(20,184,166,0.08)"; }}
+        >
+          ◎ RING FLOW
+        </button>
         <div className="time-display">
           <span>{formattedDate}</span>
           <span style={{ marginLeft: "12px" }}>{formattedTime}</span>

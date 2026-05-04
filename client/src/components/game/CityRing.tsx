@@ -141,6 +141,18 @@ function AerialRing({ ringLevel }: { ringLevel: RingLevel }) {
   );
 }
 
+const ARROW_ANGLES_DEG = [45, 135, 225, 315];
+
+function ClockwiseArrow({ angleDeg }: { angleDeg: number }) {
+  const rad = (angleDeg * Math.PI) / 180;
+  return (
+    <mesh position={[Math.cos(rad) * 6, 0.1, Math.sin(rad) * 6]} rotation={[Math.PI / 2, Math.PI - rad, 0]}>
+      <coneGeometry args={[0.18, 0.5, 6]} />
+      <meshBasicMaterial color={0x00ffff} transparent opacity={0.7} />
+    </mesh>
+  );
+}
+
 export function CityRing({ cityId, position }: CityRingProps) {
   const ringRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
@@ -218,6 +230,9 @@ export function CityRing({ cityId, position }: CityRingProps) {
         </bufferGeometry>
         <lineBasicMaterial color={0x00ffff} linewidth={2} opacity={0.5} transparent />
       </lineSegments>
+
+      {/* Clockwise Direction Arrows */}
+      {ARROW_ANGLES_DEG.map(a => <ClockwiseArrow key={a} angleDeg={a} />)}
     </group>
   );
 }

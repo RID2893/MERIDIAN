@@ -3,7 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { OrbitControls, Stars } from "@react-three/drei";
 import * as THREE from "three";
 import { useRacing } from "@/lib/stores/useRacing";
-import { RacingTrack } from "./RacingTrack";
+import { RacingTrack, RacingVertiports } from "./RacingTrack";
 import { RacingGates } from "./RacingGates";
 import { RacingVehicles } from "./RacingVehicles";
 
@@ -73,20 +73,22 @@ export function RacingScene() {
 
       {/* ── Circuit ─────────────────────────────────────────────────────── */}
       <RacingTrack />
+      <RacingVertiports />
       <RacingGates />
       <RacingVehicles />
 
       {/* ── Camera ──────────────────────────────────────────────────────── */}
       {/* Orbit centered on lollipop circuit — drag to rotate, scroll to zoom */}
       <OrbitControls
-        target={[0, 0.8, -1]}
+        target={[0, 0.8, 5]}
         enableDamping
         dampingFactor={0.06}
         enablePan={true}
+        enableRotate={true}
         minDistance={4}
-        maxDistance={45}
-        minPolarAngle={0.1}
-        maxPolarAngle={Math.PI * 0.85}
+        maxDistance={60}
+        minPolarAngle={0}
+        maxPolarAngle={Math.PI * 0.92}
       />
     </>
   );

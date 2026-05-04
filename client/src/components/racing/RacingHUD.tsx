@@ -405,6 +405,7 @@ function ControlBar() {
   return (
     <div style={{
       position: 'absolute',
+      pointerEvents: 'auto',
       bottom: 0,
       left: 0,
       right: '360px',
@@ -513,6 +514,7 @@ function RacingHeader() {
   return (
     <div style={{
       position: 'absolute',
+      pointerEvents: 'auto',
       top: 0, left: 0, right: 0,
       height: '54px',
       background: 'rgba(4, 8, 16, 0.90)',
@@ -578,6 +580,7 @@ function RightPanel() {
   return (
     <div style={{
       position: 'absolute',
+      pointerEvents: 'auto',
       top: '54px', right: 0, bottom: '60px',
       width: '360px',
       background: 'rgba(4, 8, 16, 0.78)',
@@ -599,7 +602,7 @@ function RightPanel() {
 export function RacingHUD() {
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}>
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
         <RacingHeader />
         <AbortBanner />
         <RightPanel />

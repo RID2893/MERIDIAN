@@ -1,8 +1,10 @@
 import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { useRacing, VEHICLE_CONFIGS, getChallengePoint } from "@/lib/stores/useRacing";
+import { useRacing, VEHICLE_CONFIGS, GATE_DEFS } from "@/lib/stores/useRacing";
 import { makeCurve, ALT_CLASS_A, ALT_CLASS_B } from "./RacingTrack";
+
+const CHALLENGE_ROUTE_EXIT: Record<string, number> = { G2: 0.15, G3: 0.32, G4: 0.72, G5: 0.97 };
 
 const UP       = new THREE.Vector3(0, 1, 0);
 const FWD      = new THREE.Vector3(0, 0, 1);  // box elongated along Z
@@ -64,10 +66,13 @@ function Vehicle({ vehicleId }: { vehicleId: string }) {
     let tan: THREE.Vector3;
 
     if (vehicle.mode === 'CHALLENGE' && vehicle.challengeGk) {
-      pos = getChallengePoint(vehicle.challengeGk, cfg.vehicleClass, vehicle.challengeT);
-      const posNext = getChallengePoint(vehicle.challengeGk, cfg.vehicleClass, Math.min(vehicle.challengeT + 0.02, 1));
-      tan = posNext.clone().sub(pos).normalize();
-      if (tan.lengthSq() < 0.001) tan = new THREE.Vector3(0, 0, -1);
+      const gateT    = GATE_DEFS.find(g => g.id === vehicle.challengeGk)?.t ?? vehicle.t;
+      const exitTval = CHALLENGE_ROUTE_EXIT[vehicle.challengeGk] ?? gateT;
+      const visualT  = gateT + (exitTval - gateT) * vehicle.challengeT;
+      pos = curve.getPoint(visualT);
+      tan = curve.getTangent(visualT).normalize();
+      const right = new THREE.Vector3().crossVectors(UP, tan).normalize();
+      pos.add(right.multiplyScalar(LATERAL_OFFSET[cfg.vehicleClass]));
     } else {
       const t    = vehicle.t;
       pos        = curve.getPoint(t);

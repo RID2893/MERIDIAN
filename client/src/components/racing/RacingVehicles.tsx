@@ -1,10 +1,13 @@
 import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { useRacing, VEHICLE_CONFIGS, GATE_DEFS } from "@/lib/stores/useRacing";
+import { useRacing, VEHICLE_CONFIGS, GATE_DEFS, CHALLENGE_ROUTES } from "@/lib/stores/useRacing";
 import { makeCurve, ALT_CLASS_A, ALT_CLASS_B } from "./RacingTrack";
 
-const CHALLENGE_ROUTE_EXIT: Record<string, number> = { G2: 0.15, G3: 0.32, G4: 0.72, G5: 0.97 };
+// Derived from CHALLENGE_ROUTES — single source of truth, can never diverge
+const CHALLENGE_ROUTE_EXIT: Record<string, number> = Object.fromEntries(
+  Object.entries(CHALLENGE_ROUTES).map(([gk, cr]) => [gk, cr.exitT])
+);
 
 const UP       = new THREE.Vector3(0, 1, 0);
 const FWD      = new THREE.Vector3(0, 0, 1);  // box elongated along Z

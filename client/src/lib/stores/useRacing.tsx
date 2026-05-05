@@ -1,5 +1,7 @@
 import { create } from 'zustand';
-import * as THREE from 'three';
+import {
+  buildMRSSGates, MAX_GATES, INITIAL_GATES, quadrantOf,
+} from '@/lib/mrssTopology';
 
 // ─── MRSSP Vehicle Config ──────────────────────────────────────────────────
 export const VEHICLE_CONFIGS = [
@@ -18,101 +20,52 @@ const BASE_SPD = 0.055;
 const ALT_CLASS_A = 1.5;
 const ALT_CLASS_B = 0.8;
 
-// ─── Gate Definitions ─────────────────────────────────────────────────────
-// t-values calibrated to the 21-point lollipop curve (20 segments, step=0.05)
-// pt0=START(t=0) pt2=ring-entry(t=0.10) pt6=apex-A(t=0.30) pt14=apex-B(t=0.70) pt18=ring-exit(t=0.90)
-export const GATE_DEFS = [
-  { id: 'G1', name: 'START / FINISH', t: 0.00, color: '#00FF88', missionPhase: 'Race Start — Data Capture' },
-  { id: 'G2', name: 'Sector 1 Entry', t: 0.10, color: '#00D4FF', missionPhase: 'Technical Zone — Assessment' },
-  { id: 'G3', name: 'Apex A',         t: 0.30, color: '#FF6B00', missionPhase: 'Power Sector — Execution' },
-  { id: 'G4', name: 'Apex B',         t: 0.70, color: '#FF6B00', missionPhase: 'Strategy — Road-Map' },
-  { id: 'G5', name: 'Ring Exit',      t: 0.90, color: '#00D4FF', missionPhase: 'Final Push — Optimization' },
-] as const;
+// ─── Gate Definitions — built from MRSS topology (single source of truth) ─
+// 20 gates total; INITIAL_GATES=8 active, evenly spaced (step = 20/8 = 2.5)
+// Active indices: 0, 2, 5, 7, 10, 12, 15, 17
+const Q_COLORS = ['#00FF88', '#00D4FF', '#FF6B00', '#a78bfa'] as const;
+const MRSS_GATES = buildMRSSGates(INITIAL_GATES);
 
-// ─── Challenge Routes ──────────────────────────────────────────────────────
-// [x, z] waypoints in world space (ring center=[0,-5], ring R=5, straight z=0→9)
-// routeA = Class A (wider sweep), routeB = Class B (tighter path)
-// exitT: circuit t-value where vehicle re-enters main oval after challenge
+export const GATE_DEFS = MRSS_GATES.map(g => ({
+  id:          `G${g.index + 1}`,
+  name:        g.index === 0 ? 'START / FINISH'
+               : g.active    ? `Q${g.quadrant + 1} · Gate ${g.index + 1}`
+                              : `Gate ${g.index + 1}`,
+  t:           g.index / MAX_GATES,
+  color:       g.active ? Q_COLORS[g.quadrant] : '#334155',
+  missionPhase: g.index === 0 ? 'Race Start — Data Capture'
+                : g.active     ? `Q${g.quadrant + 1} Checkpoint`
+                               : '',
+  active:      g.active,
+}));
+
+// ─── Challenge Routes — scoring only (geometry lives in RacingVehicles) ───
+// Each active gate except G1 has a challenge: vehicle follows MRSS spoke to
+// its vertiport (outbound) and back (inbound) while being scored.
+// exitT = gate.t + half-gate-width advance so vehicle doesn't re-trigger.
 
 type ScoreKey = keyof MRSSPScores;
 
+// Scoring data only — route geometry is derived from MRSS spoke in RacingVehicles.tsx
 interface ChallengeRoute {
   title:       string;
-  desc:        string;
   scoreKey:    ScoreKey;
   passBonus:   number;
   failPenalty: number;
-  exitT:       number;
-  routeA:      [number, number][];
-  routeB:      [number, number][];
+  exitT:       number;  // gate.t + half-gate-width so vehicle doesn't re-trigger
 }
 
+// Active gate IDs (INITIAL_GATES=8, step=2.5 → indices 0,2,5,7,10,12,15,17)
+// G1 (index 0) = START/FINISH, no challenge.
 export const CHALLENGE_ROUTES: Record<string, ChallengeRoute> = {
-  // G2 — ring entry [0,0]: banked arc sweep inside lower ring interior
-  G2: {
-    title:       'Energy Budget Checkpoint',
-    desc:        'Navigate the efficiency corridor inside the ring entry',
-    scoreKey:    'efficiency',
-    passBonus:   5,
-    failPenalty: 8,
-    exitT:       0.15,
-    routeA: [[0,0], [3,-0.5], [5,-3], [4.5,-5], [3,-4], [1,-2.5], [0,-1.5]],
-    routeB: [[0,0], [-3,-0.5], [-5,-3], [-4.5,-5], [-3,-4], [-1,-2.5], [0,-1.5]],
-  },
-  // G3 — right apex [5,-5]: deep loop inside upper-right quadrant
-  G3: {
-    title:       'Max Performance Window',
-    desc:        'Full-throttle run through the right-side power sector',
-    scoreKey:    'gateTime',
-    passBonus:   7,
-    failPenalty: 10,
-    exitT:       0.32,
-    routeA: [[5,-5], [4,-2], [2.5,-0.5], [0.5,-1.5], [0,-4], [1,-7], [3.5,-9], [5,-7], [5,-5]],
-    routeB: [[5,-5], [3.5,-3], [2,-1.5], [0.5,-3], [1,-6], [3,-8], [5,-5]],
-  },
-  // G4 — left apex [-5,-5]: mirror of G3 in upper-left quadrant
-  G4: {
-    title:       'TRACON Routing Decision',
-    desc:        'Precision routing through LA TRACON constraints',
-    scoreKey:    'decision',
-    passBonus:   6,
-    failPenalty: 9,
-    exitT:       0.72,
-    routeA: [[-5,-5], [-4,-2], [-2.5,-0.5], [-0.5,-1.5], [0,-4], [-1,-7], [-3.5,-9], [-5,-7], [-5,-5]],
-    routeB: [[-5,-5], [-3.5,-3], [-2,-1.5], [-0.5,-3], [-1,-6], [-3,-8], [-5,-5]],
-  },
-  // G5 — ring exit [0,0]: wide S-curve up the return straight
-  G5: {
-    title:       'Recovery Protocol Check',
-    desc:        'Verify abort-recovery readiness on the return approach',
-    scoreKey:    'recovery',
-    passBonus:   5,
-    failPenalty: 8,
-    exitT:       0.97,
-    routeA: [[0,0], [2.5,1.5], [3.5,4], [2.5,6.5], [0,9]],
-    routeB: [[0,0], [-2.5,1.5], [-3.5,4], [-2.5,6.5], [0,9]],
-  },
+  'G3':  { title: 'Energy Budget Check',    scoreKey: 'efficiency', passBonus: 5, failPenalty: 8,  exitT: 0.125 },
+  'G6':  { title: 'Max Performance Window', scoreKey: 'gateTime',   passBonus: 7, failPenalty: 10, exitT: 0.275 },
+  'G8':  { title: 'Precision Sector',       scoreKey: 'precision',  passBonus: 6, failPenalty: 9,  exitT: 0.375 },
+  'G11': { title: 'TRACON Decision Point',  scoreKey: 'decision',   passBonus: 6, failPenalty: 9,  exitT: 0.525 },
+  'G13': { title: 'Recovery Protocol',      scoreKey: 'recovery',   passBonus: 5, failPenalty: 8,  exitT: 0.625 },
+  'G16': { title: 'Power Sector',           scoreKey: 'gateTime',   passBonus: 7, failPenalty: 10, exitT: 0.775 },
+  'G18': { title: 'Final Check',            scoreKey: 'efficiency', passBonus: 5, failPenalty: 8,  exitT: 0.875 },
 };
-
-// Interpolate a world-space position along a challenge route (t: 0→1)
-export function getChallengePoint(gk: string, vehicleClass: 'A' | 'B', t: number): THREE.Vector3 {
-  const cr = CHALLENGE_ROUTES[gk];
-  const altY = vehicleClass === 'A' ? ALT_CLASS_A : ALT_CLASS_B;
-  if (!cr) return new THREE.Vector3(0, altY, 0);
-  const pts = vehicleClass === 'A' ? cr.routeA : cr.routeB;
-  const n   = pts.length - 1;
-  const ct  = Math.max(0, Math.min(t, 1));
-  const fi  = ct * n;
-  const idx = Math.min(Math.floor(fi), n - 1);
-  const lt  = fi - idx;
-  const p0  = pts[idx];
-  const p1  = pts[Math.min(idx + 1, n)];
-  return new THREE.Vector3(
-    p0[0] + (p1[0] - p0[0]) * lt,
-    altY,
-    p0[1] + (p1[1] - p0[1]) * lt,
-  );
-}
 
 // ─── Types ────────────────────────────────────────────────────────────────
 export interface MRSSPScores {

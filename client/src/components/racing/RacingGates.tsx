@@ -3,7 +3,8 @@ import { useFrame } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { useRacing, GATE_DEFS } from "@/lib/stores/useRacing";
-import { makeCurve, ALT_CLASS_A, ALT_CLASS_B } from "./RacingTrack";
+import { gatePosition3D, gateAngleRad } from "@/lib/mrssTopology";
+import { ALT_CLASS_A, ALT_CLASS_B, RING_R } from "./RacingTrack";
 
 const GATE_COLOR_MAP: Record<string, number> = {
   '#00FF88': 0x00ff88,
@@ -14,9 +15,8 @@ const GATE_COLOR_MAP: Record<string, number> = {
 const MID_ALT = (ALT_CLASS_A + ALT_CLASS_B) / 2;
 
 // ─── Single Gate ─────────────────────────────────────────────────────────
-function Gate({ gateDef, curveA }: {
+function Gate({ gateDef }: {
   gateDef: typeof GATE_DEFS[number];
-  curveA: THREE.CatmullRomCurve3;
 }) {
   const ringRef    = useRef<THREE.Mesh>(null!);
   const glowRef    = useRef<THREE.Mesh>(null!);
@@ -28,16 +28,21 @@ function Gate({ gateDef, curveA }: {
   const gate       = useRacing(s => s.gates.find(g => g.id === gateDef.id)!);
 
   const { position, quaternion } = useMemo(() => {
-    const pos = curveA.getPoint(gateDef.t);
-    pos.y = MID_ALT;
-    const tan    = curveA.getTangent(gateDef.t).normalize();
-    const up     = new THREE.Vector3(0, 1, 0);
-    const right  = new THREE.Vector3().crossVectors(up, tan).normalize();
+    // Gate index = round(t * MAX_GATES) — maps t back to gate index
+    const gateIndex = Math.round(gateDef.t * 20);
+    const gp  = gatePosition3D(gateIndex, RING_R, MID_ALT);
+    const pos = new THREE.Vector3(gp.x, MID_ALT, gp.z);
+
+    // Tangent = clockwise direction on ring at this angle
+    const angle = gateAngleRad(gateIndex);
+    const tan   = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle)).normalize();
+    const up    = new THREE.Vector3(0, 1, 0);
+    const right = new THREE.Vector3().crossVectors(up, tan).normalize();
     const trueUp = new THREE.Vector3().crossVectors(tan, right).normalize();
-    const mat    = new THREE.Matrix4().makeBasis(right, trueUp, tan);
-    const quat   = new THREE.Quaternion().setFromRotationMatrix(mat);
+    const mat   = new THREE.Matrix4().makeBasis(right, trueUp, tan);
+    const quat  = new THREE.Quaternion().setFromRotationMatrix(mat);
     return { position: pos, quaternion: quat };
-  }, [curveA, gateDef.t]);
+  }, [gateDef.t]);
 
   const colorHex = GATE_COLOR_MAP[gateDef.color] ?? 0x888888;
 

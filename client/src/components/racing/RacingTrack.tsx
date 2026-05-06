@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import {
-  MAX_GATES, INITIAL_GATES,
+  INITIAL_GATES,
   buildMRSSGates,
   gateAngleRad, gatePosition3D, vertiportPosition3D,
+  buildCircuit3DPoints,
 } from "@/lib/mrssTopology";
 
 // ─── 3D constants ─────────────────────────────────────────────────────────
@@ -14,17 +15,15 @@ const        STEM_LEN    = 6;   // visual start/finish stem beyond ring perimete
 
 const MID_ALT = (ALT_CLASS_A + ALT_CLASS_B) / 2;
 
-// ─── Race lane curves (closed rings — one per altitude class) ─────────────
-// t = gateIndex / MAX_GATES maps directly to angle on ring.
-function makeRingPoints(altY: number): THREE.Vector3[] {
-  return Array.from({ length: MAX_GATES }, (_, i) => {
-    const { x, z } = gatePosition3D(i, RING_R, altY);
-    return new THREE.Vector3(x, altY, z);
-  });
-}
-
+// ─── Race lane curve (Ring-Flow compound path) ────────────────────────────
+// Pattern per segment: VP_i → Gate_i → arc_mid → Gate_j
+// 4 control points × 8 active gates = 32 pts, closed circuit.
+// Gate VP position: t = seg/8.  Gate departure: t ≈ seg/8 + 1/32.
 export function makeCurve(altY: number): THREE.CatmullRomCurve3 {
-  return new THREE.CatmullRomCurve3(makeRingPoints(altY), true, 'catmullrom', 0.5);
+  const pts = buildCircuit3DPoints(INITIAL_GATES, RING_R, altY).map(
+    p => new THREE.Vector3(p.x, p.y, p.z)
+  );
+  return new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
 }
 
 // ─── Spoke geometry helper ────────────────────────────────────────────────

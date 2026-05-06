@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  buildMRSSGates, MAX_GATES, INITIAL_GATES, quadrantOf,
+  buildMRSSGates, INITIAL_GATES,
 } from '@/lib/mrssTopology';
 
 // ─── MRSSP Vehicle Config ──────────────────────────────────────────────────
@@ -21,22 +21,22 @@ const ALT_CLASS_A = 1.5;
 const ALT_CLASS_B = 0.8;
 
 // ─── Gate Definitions — built from MRSS topology (single source of truth) ─
-// 20 gates total; INITIAL_GATES=8 active, evenly spaced (step = 20/8 = 2.5)
-// Active indices: 0, 2, 5, 7, 10, 12, 15, 17
+// Active gates only (INITIAL_GATES=8, indices: 0,2,5,7,10,12,15,17).
+// Circuit t-value = seg/N where seg = 0..7 (VP position on compound curve).
+// Compound curve: 4 pts/seg × 8 segs = 32 ctrl pts. VP at seg/8, gate depart at seg/8+1/32.
 const Q_COLORS = ['#00FF88', '#00D4FF', '#FF6B00', '#a78bfa'] as const;
-const MRSS_GATES = buildMRSSGates(INITIAL_GATES);
+const MRSS_GATES   = buildMRSSGates(INITIAL_GATES);
+const ACTIVE_GATES = MRSS_GATES.filter(g => g.active).sort((a, b) => a.index - b.index);
+const N_ACTIVE     = ACTIVE_GATES.length;
 
-export const GATE_DEFS = MRSS_GATES.map(g => ({
+export const GATE_DEFS = ACTIVE_GATES.map((g, seg) => ({
   id:          `G${g.index + 1}`,
-  name:        g.index === 0 ? 'START / FINISH'
-               : g.active    ? `Q${g.quadrant + 1} · Gate ${g.index + 1}`
-                              : `Gate ${g.index + 1}`,
-  t:           g.index / MAX_GATES,
-  color:       g.active ? Q_COLORS[g.quadrant] : '#334155',
-  missionPhase: g.index === 0 ? 'Race Start — Data Capture'
-                : g.active     ? `Q${g.quadrant + 1} Checkpoint`
-                               : '',
-  active:      g.active,
+  mrssIdx:     g.index,
+  name:        g.index === 0 ? 'START / FINISH' : `Q${g.quadrant + 1} · Gate ${g.index + 1}`,
+  t:           seg / N_ACTIVE,
+  color:       Q_COLORS[g.quadrant],
+  missionPhase: g.index === 0 ? 'Race Start — Data Capture' : `Q${g.quadrant + 1} Checkpoint`,
+  active:      true,
 }));
 
 // ─── Challenge Routes — scoring only (geometry lives in RacingVehicles) ───
@@ -57,14 +57,15 @@ interface ChallengeRoute {
 
 // Active gate IDs (INITIAL_GATES=8, step=2.5 → indices 0,2,5,7,10,12,15,17)
 // G1 (index 0) = START/FINISH, no challenge.
+// exitT = gate.t + 2/32 = gate.t + 0.0625 (arc midpoint of next segment — past gate, no re-trigger)
 export const CHALLENGE_ROUTES: Record<string, ChallengeRoute> = {
-  'G3':  { title: 'Energy Budget Check',    scoreKey: 'efficiency', passBonus: 5, failPenalty: 8,  exitT: 0.125 },
-  'G6':  { title: 'Max Performance Window', scoreKey: 'gateTime',   passBonus: 7, failPenalty: 10, exitT: 0.275 },
-  'G8':  { title: 'Precision Sector',       scoreKey: 'precision',  passBonus: 6, failPenalty: 9,  exitT: 0.375 },
-  'G11': { title: 'TRACON Decision Point',  scoreKey: 'decision',   passBonus: 6, failPenalty: 9,  exitT: 0.525 },
-  'G13': { title: 'Recovery Protocol',      scoreKey: 'recovery',   passBonus: 5, failPenalty: 8,  exitT: 0.625 },
-  'G16': { title: 'Power Sector',           scoreKey: 'gateTime',   passBonus: 7, failPenalty: 10, exitT: 0.775 },
-  'G18': { title: 'Final Check',            scoreKey: 'efficiency', passBonus: 5, failPenalty: 8,  exitT: 0.875 },
+  'G3':  { title: 'Energy Budget Check',    scoreKey: 'efficiency', passBonus: 5, failPenalty: 8,  exitT: 0.1875 },
+  'G6':  { title: 'Max Performance Window', scoreKey: 'gateTime',   passBonus: 7, failPenalty: 10, exitT: 0.3125 },
+  'G8':  { title: 'Precision Sector',       scoreKey: 'precision',  passBonus: 6, failPenalty: 9,  exitT: 0.4375 },
+  'G11': { title: 'TRACON Decision Point',  scoreKey: 'decision',   passBonus: 6, failPenalty: 9,  exitT: 0.5625 },
+  'G13': { title: 'Recovery Protocol',      scoreKey: 'recovery',   passBonus: 5, failPenalty: 8,  exitT: 0.6875 },
+  'G16': { title: 'Power Sector',           scoreKey: 'gateTime',   passBonus: 7, failPenalty: 10, exitT: 0.8125 },
+  'G18': { title: 'Final Check',            scoreKey: 'efficiency', passBonus: 5, failPenalty: 8,  exitT: 0.9375 },
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────

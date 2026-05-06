@@ -62,14 +62,14 @@ export function RacingScene() {
 
       {/* ── Ground ──────────────────────────────────────────────────────── */}
       {/* Semi-reflective airfield surface */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, -2.5]} receiveShadow>
-        <planeGeometry args={[80, 60]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
+        <planeGeometry args={[80, 80]} />
         <meshStandardMaterial color="#030A14" metalness={0.25} roughness={0.12} />
       </mesh>
       {/* Fine grid — overall surface markings */}
-      <primitive object={gridFine}   position={[0, -0.04, -2.5]} />
+      <primitive object={gridFine}   position={[0, -0.04, 0]} />
       {/* Coarse grid — major runway/sector divisions */}
-      <primitive object={gridCoarse} position={[0, -0.035, -2.5]} />
+      <primitive object={gridCoarse} position={[0, -0.035, 0]} />
 
       {/* ── Circuit ─────────────────────────────────────────────────────── */}
       <RacingTrack />
@@ -80,7 +80,7 @@ export function RacingScene() {
       {/* ── Camera ──────────────────────────────────────────────────────── */}
       {/* Orbit centered on lollipop circuit — drag to rotate, scroll to zoom */}
       <OrbitControls
-        target={[0, 0.8, 5]}
+        target={[0, 0.8, 0]}
         enableDamping
         dampingFactor={0.06}
         enablePan={true}

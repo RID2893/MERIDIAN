@@ -114,3 +114,38 @@ export function activeRoutePairs(
     toIdx:   active[(i + 1) % active.length].index,
   }));
 }
+
+// ─── Compound circuit path (Ring-Flow architecture) ───────────────────────
+// For each consecutive active gate pair (clockwise):
+//   VP_i → Gate_i → arc_midpoint → Gate_j
+// 4 control points per segment × N active gates → N×4 point closed circuit.
+// Gate VP position on circuit: t = seg / N  (where seg = 0..N-1)
+export function buildCircuit3DPoints(
+  initialActive: number,
+  ringR: number,
+  altY: number,
+): Vec3[] {
+  const gates  = buildMRSSGates(initialActive);
+  const active = gates.filter(g => g.active).sort((a, b) => a.index - b.index);
+  const pts: Vec3[] = [];
+
+  for (let i = 0; i < active.length; i++) {
+    const fromG = active[i];
+    const toG   = active[(i + 1) % active.length];
+
+    pts.push(vertiportPosition3D(fromG.index, ringR, altY));  // VP (inside ring)
+    pts.push(gatePosition3D(fromG.index, ringR, altY));        // Gate departure (on ring)
+
+    // Clockwise arc midpoint between fromG and toG
+    const a0  = gateAngleRad(fromG.index);
+    const a1  = gateAngleRad(toG.index);
+    let delta = a1 - a0;
+    while (delta <= 0) delta += Math.PI * 2;
+    const mid = a0 + delta * 0.5;
+    pts.push({ x: Math.cos(mid) * ringR, y: altY, z: Math.sin(mid) * ringR });
+
+    pts.push(gatePosition3D(toG.index, ringR, altY));          // Gate arrival (on ring)
+  }
+
+  return pts;
+}
